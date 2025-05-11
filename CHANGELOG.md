@@ -10,3 +10,4 @@ Automated and verified release changelog.
 - [2025-04-28 16:00] feat(wake-word): implement local Porcupine keyword detector hook
 - [2025-05-06 09:30] feat(commands): add application launch and workspace window management skills
 - [2025-05-11 09:18] refactor(pipeline): decouple speech recognition loop from agent response graph
+- [2025-05-11 15:58] test(audio): add unit assertions for ring buffer audio chunking
