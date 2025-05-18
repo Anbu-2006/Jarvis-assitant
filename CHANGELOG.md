@@ -13,3 +13,4 @@ Automated and verified release changelog.
 - [2025-05-11 15:58] test(audio): add unit assertions for ring buffer audio chunking
 - [2025-05-15 09:35] feat(status): add floating HUD tray icon with speech state indicators
 - [2025-05-15 16:03] feat(audio): integrate audio-reactive particle visualizer in canvas
+- [2025-05-18 09:27] perf(stt): reduce Whisper streaming buffer latency to under 120ms
