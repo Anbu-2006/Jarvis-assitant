@@ -15,3 +15,4 @@ Automated and verified release changelog.
 - [2025-05-15 16:03] feat(audio): integrate audio-reactive particle visualizer in canvas
 - [2025-05-18 09:27] perf(stt): reduce Whisper streaming buffer latency to under 120ms
 - [2025-05-18 15:56] fix(audio): resolve Windows WASAPI audio device enumeration hang
+- [2025-05-22 09:38] feat(telemetry): add system CPU, RAM, and GPU utilization query intents
