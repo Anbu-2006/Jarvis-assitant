@@ -19,3 +19,4 @@ Automated and verified release changelog.
 - [2025-05-22 16:08] feat(tts): configure British accent pitch, rate, and prosody parameters
 - [2025-05-27 09:27] feat(wake-word): implement local Porcupine keyword detector hook
 - [2025-06-01 09:21] feat(commands): add application launch and workspace window management skills
+- [2025-06-01 15:55] refactor(pipeline): decouple speech recognition loop from agent response graph
