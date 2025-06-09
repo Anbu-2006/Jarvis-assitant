@@ -22,3 +22,4 @@ Automated and verified release changelog.
 - [2025-06-01 15:55] refactor(pipeline): decouple speech recognition loop from agent response graph
 - [2025-06-04 09:23] test(audio): add unit assertions for ring buffer audio chunking
 - [2025-06-04 15:57] feat(status): add floating HUD tray icon with speech state indicators
+- [2025-06-09 09:44] feat(audio): integrate audio-reactive particle visualizer in canvas
