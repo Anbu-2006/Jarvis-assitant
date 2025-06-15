@@ -1,0 +1,240 @@
+
+
+# 🤖 JARVIS Personal Assistant – Setup Guid brain.py
+
+
+# 🎙️ LiveKit Voice Setup (JARVIS)
+
+This section explains how to install LiveKit, connect your API inside brain.py, and resolve common *live noise cancellation errors*.
+
+---
+
+## ✅ Prerequisites
+
+Make sure:
+
+* Your .venv is activated
+* agent.py already runs
+* You have LiveKit credentials:
+
+From LiveKit Dashboard:
+
+* LIVEKIT_URL
+* LIVEKIT_API_KEY
+* LIVEKIT_API_SECRET
+
+---
+
+## 📦 Step 1 — Install LiveKit Packages
+
+With .venv active, run:
+
+
+pip install livekit
+pip install livekit-agents
+pip install livekit-plugins-google
+pip install livekit-plugins-noise-cancellation
+pip install python-dotenv
+
+
+Recommended extra audio deps:
+
+
+pip install sounddevice pyaudio numpy
+
+
+If pyaudio fails on Windows:
+
+
+pip install pipwin
+pipwin install pyaudio
+
+
+Then verify:
+
+
+pip list | findstr livekit
+
+
+You should see:
+
+* livekit
+* livekit-agents
+* livekit-plugins-google
+* livekit-plugins-noise-cancellation
+
+---
+
+## 🔐 Step 2 — Add LiveKit API Keys
+
+Create or open .env in project root:
+
+Put your credentials there:
+
+* LIVEKIT_URL
+* LIVEKIT_API_KEY
+* LIVEKIT_API_SECRET
+
+Save file.
+
+Your brain.py should load these using dotenv and initialize LiveKit from there.
+
+(Important: never hardcode keys directly in GitHub.)
+
+---
+
+## 🧠 Step 3 — brain.py (Voice Brain)
+
+Inside brain.py:
+
+* Load .env
+* Initialize LiveKit client
+* Create voice agent
+* Import all your tools (file, window, keyboard, memory)
+* Attach noise cancellation plugin
+
+Conceptually:
+
+brain.py =
+
+Voice Input → LiveKit → Noise Cancellation → JARVIS Tools → Response
+
+Make sure:
+
+✔ brain.py imports your skill files
+✔ No circular imports
+
+If error appears, first confirm all plugins are installed (Step 1).
+
+---
+
+## 🔊 Step 4 — Live Noise Cancellation Error (Common Fix)
+
+If you see errors like:
+
+* noise_cancellation not found
+* module not installed
+* audio stream failed
+
+Do this:
+
+### 1. Reinstall plugin
+
+
+pip uninstall livekit-plugins-noise-cancellation -y
+pip install livekit-plugins-noise-cancellation
+
+
+---
+
+### 2. Install audio backend
+
+
+pip install sounddevice pyaudio
+
+
+Windows users (if pyaudio fails):
+
+
+pip install pipwin
+pipwin install pyaudio
+
+
+---
+
+### 3. Restart terminal
+
+Close terminal completely.
+
+Reopen:
+
+Activate env:
+
+
+.venv\Scripts\activate
+
+
+Run again:
+
+
+python brain.py console
+
+
+---
+
+## 🔁 Step 5 — Import All Tools into brain.py
+
+If JARVIS tools are not working with voice:
+
+Make sure brain.py imports:
+
+* file tools
+* window control
+* keyboard/mouse
+* memory system
+
+Then agent.py should only start brain.
+
+Architecture:
+
+agent.py → brain.py → tools
+
+This avoids confusion.
+
+---
+
+## ▶️ Final Run
+
+Always run from root:
+
+
+python brain.py console
+
+
+If voice works:
+
+You’ll see mic activation + LiveKit connection.
+
+---
+
+## 🛑 If Still Error
+
+Check one by one:
+
+
+pip show livekit
+pip show livekit-agents
+pip show livekit-plugins-noise-cancellation
+
+
+If missing → reinstall.
+
+Also confirm:
+
+* Microphone permissions allowed
+* No other app using mic
+* .env loaded correctly
+
+---
+
+## ✅ Summary
+
+1 Activate .venv
+2 Install LiveKit + plugins
+3 Add API keys to .env
+4 Load keys in brain.py
+5 Import all tools in brain.py
+6 Run python agent.py
+
+That’s it.
+
+---
+
+If you want next upgrade, Auxin:
+
+👉 Wake word (“Hey Jarvis”)
+👉 Always-listening mode
+👉 GUI mic indicator
+👉 Background service
+
+
