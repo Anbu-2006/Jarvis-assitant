@@ -1,0 +1,899 @@
+/* ===========================================================================
+   JARVIS — Dark Brutalist Design System
+   =========================================================================== */
+
+:root {
+  --neon-cyan: #00ffcc;
+  --neon-red: #ff003c;
+  --neon-yellow: #ffcc00;
+  --neon-dim: rgba(0, 255, 204, 0.3);
+  --surface-bg: #0a0a0c;
+  --void-bg: #020204;
+  --text-color: #e0e0e0;
+  --text-dim: #888;
+  --border-color: #333;
+  --mono-font: 'Courier New', Courier, monospace;
+  --ui-font: 'Segoe UI', system-ui, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--void-bg);
+  font-family: var(--ui-font);
+  color: var(--text-color);
+}
+
+/* ===========================================================================
+   Canvas / Orb
+   =========================================================================== */
+
+#orb-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ===========================================================================
+   Status & Label
+   =========================================================================== */
+
+#status-text {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(0, 255, 204, 0.45);
+  font-size: 13px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  font-weight: 300;
+  font-family: var(--mono-font);
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#jarvis-label {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(0, 255, 204, 0.15);
+  font-size: 10px;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  font-weight: 300;
+  font-family: var(--mono-font);
+  pointer-events: none;
+  z-index: 10;
+}
+
+#error-text {
+  position: fixed;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 0, 60, 0.7);
+  font-size: 13px;
+  letter-spacing: 1px;
+  font-weight: 300;
+  font-family: var(--mono-font);
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+}
+
+/* ===========================================================================
+   Controls (Top Right)
+   =========================================================================== */
+
+#controls {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 20;
+}
+
+#controls button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(0, 255, 204, 0.15);
+  border-radius: 0;
+  background: rgba(0, 255, 204, 0.03);
+  color: rgba(0, 255, 204, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  font-family: var(--mono-font);
+}
+
+#controls button:hover {
+  background: rgba(0, 255, 204, 0.1);
+  color: var(--neon-cyan);
+  border-color: rgba(0, 255, 204, 0.4);
+  box-shadow: 0 0 8px rgba(0, 255, 204, 0.15);
+}
+
+#controls button.muted {
+  color: rgba(255, 0, 60, 0.6);
+  border-color: rgba(255, 0, 60, 0.2);
+}
+
+/* ===========================================================================
+   Menu Dropdown
+   =========================================================================== */
+
+#menu-dropdown {
+  position: fixed;
+  top: 58px;
+  right: 16px;
+  background: rgba(5, 5, 10, 0.96);
+  border: 1px solid var(--neon-cyan);
+  padding: 4px;
+  z-index: 20;
+  backdrop-filter: blur(12px);
+  box-shadow: 3px 3px 0 rgba(0, 255, 204, 0.3);
+}
+
+#menu-dropdown button {
+  display: block;
+  width: 100%;
+  padding: 10px 18px;
+  border: none;
+  background: none;
+  color: rgba(0, 255, 204, 0.55);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--mono-font);
+  text-transform: uppercase;
+  transition: all 0.1s;
+}
+
+#menu-dropdown button:hover {
+  background: rgba(0, 255, 204, 0.08);
+  color: var(--neon-cyan);
+}
+
+/* ===========================================================================
+   INITIALIZE OVERLAY
+   =========================================================================== */
+
+.init-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.97);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  transition: opacity 0.5s ease;
+}
+
+.init-content {
+  text-align: center;
+  border: 2px solid var(--neon-cyan);
+  padding: 50px 60px;
+  background: var(--void-bg);
+  box-shadow: 6px 6px 0 var(--neon-cyan);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Scanline effect on overlay */
+.init-content::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 204, 0.015) 2px,
+    rgba(0, 255, 204, 0.015) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.init-title {
+  font-size: 2.8rem;
+  margin-bottom: 12px;
+  letter-spacing: 6px;
+  font-family: var(--mono-font);
+  color: var(--neon-cyan);
+  text-shadow: 0 0 30px rgba(0, 255, 204, 0.4);
+  position: relative;
+  z-index: 2;
+}
+
+.init-subtitle {
+  font-size: 0.9rem;
+  margin-bottom: 35px;
+  font-family: var(--mono-font);
+  letter-spacing: 2px;
+  color: var(--neon-dim);
+  animation: pulse 2.5s ease-in-out infinite;
+  position: relative;
+  z-index: 2;
+}
+
+.btn-brutalist.huge {
+  font-size: 1.3rem;
+  padding: 16px 36px;
+  border: 2px solid var(--neon-cyan);
+  background: transparent;
+  color: var(--neon-cyan);
+  cursor: pointer;
+  text-transform: uppercase;
+  font-family: var(--mono-font);
+  letter-spacing: 3px;
+  transition: all 0.15s;
+  box-shadow: 4px 4px 0 var(--neon-cyan);
+  position: relative;
+  z-index: 2;
+}
+
+.btn-brutalist.huge:hover {
+  background: var(--neon-cyan);
+  color: #000;
+  box-shadow: 0 0 0 var(--neon-cyan);
+  transform: translate(4px, 4px);
+}
+
+.btn-brutalist.huge:active {
+  transform: translate(6px, 6px);
+  box-shadow: 0 0 0 var(--neon-cyan);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* ===========================================================================
+   BRUTALIST HUD — Top Status Bar
+   =========================================================================== */
+
+.brutalist-hud {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 15;
+  pointer-events: none;
+}
+
+.hud-item {
+  display: flex;
+  align-items: center;
+  background: rgba(2, 2, 4, 0.88);
+  border: 1px solid rgba(0, 255, 204, 0.15);
+  border-left: 2px solid var(--neon-cyan);
+  padding: 5px 12px;
+  font-size: 10px;
+  font-family: var(--mono-font);
+  color: var(--text-color);
+  letter-spacing: 1.5px;
+  backdrop-filter: blur(6px);
+}
+
+.hud-label {
+  color: var(--text-dim);
+  margin-right: 14px;
+  padding-right: 14px;
+  border-right: 1px solid rgba(0, 255, 204, 0.12);
+  min-width: 60px;
+}
+
+/* ===========================================================================
+   SIDE HUD PANELS
+   =========================================================================== */
+
+.brutalist-panel {
+  position: fixed;
+  top: 90px;
+  bottom: 60px;
+  width: 220px;
+  background: rgba(5, 5, 8, 0.88);
+  border: 1px solid rgba(0, 255, 204, 0.12);
+  border-top: 2px solid var(--neon-cyan);
+  color: var(--text-color);
+  font-family: var(--mono-font);
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  backdrop-filter: blur(8px);
+  z-index: 15;
+  pointer-events: none;
+  overflow: hidden;
+  box-shadow: inset 0 0 20px rgba(0, 255, 204, 0.05), 0 0 15px rgba(0, 0, 0, 0.8);
+}
+
+.brutalist-panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: 
+    linear-gradient(rgba(0, 255, 204, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 204, 0.03) 1px, transparent 1px);
+  background-size: 10px 10px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.hud-left {
+  left: 16px;
+}
+
+.hud-right {
+  right: 60px;
+}
+
+.panel-header {
+  border-bottom: 1px solid rgba(0, 255, 204, 0.2);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  color: var(--neon-cyan);
+}
+
+.mt-4 { margin-top: 16px; }
+
+.panel-content {
+  flex-grow: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+}
+
+.hud-empty {
+  color: #444;
+  font-style: italic;
+  font-size: 0.65rem;
+  letter-spacing: 1px;
+}
+
+.logs-feed {
+  color: #777;
+  overflow-y: hidden;
+  font-size: 0.65rem;
+  line-height: 1.5;
+}
+
+.logs-feed div {
+  padding: 1px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.needed-item {
+  padding: 6px 8px;
+  border-left: 2px solid;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.65rem;
+  margin-bottom: 4px;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: space-between;
+}
+
+.needed-item.warning {
+  border-left-color: var(--neon-yellow);
+  color: var(--neon-yellow);
+}
+
+.needed-item.ok {
+  border-left-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+}
+
+.needed-item.error {
+  border-left-color: var(--neon-red);
+  color: var(--neon-red);
+}
+
+/* Neon text helpers */
+.text-neon { color: var(--neon-cyan); font-weight: bold; }
+.text-warn { color: var(--neon-yellow); }
+.text-error { color: var(--neon-red); }
+
+/* Glitch text */
+.glitch-text {
+  color: var(--neon-cyan);
+  text-shadow:
+    1px 0 0 rgba(255, 0, 60, 0.5),
+    -1px 0 0 rgba(0, 255, 204, 0.5);
+  font-weight: bold;
+}
+
+/* ===========================================================================
+   SETTINGS PANEL — Dark Brutalist Edition
+   =========================================================================== */
+
+#settings-container {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 100;
+}
+
+.settings-backdrop {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+#settings-container.open .settings-backdrop {
+  opacity: 1;
+}
+
+.settings-panel.brutalist {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 520px;
+  max-width: 100%;
+  height: 100%;
+  background: var(--void-bg);
+  border-left: 2px solid var(--neon-cyan);
+  box-shadow: -8px 0 20px rgba(0, 255, 204, 0.08);
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-color);
+}
+
+/* Scrollbar styling */
+.settings-panel.brutalist::-webkit-scrollbar {
+  width: 6px;
+}
+.settings-panel.brutalist::-webkit-scrollbar-track {
+  background: var(--void-bg);
+}
+.settings-panel.brutalist::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 204, 0.2);
+  border: 1px solid rgba(0, 255, 204, 0.1);
+}
+
+#settings-container.open .settings-panel.brutalist {
+  transform: translateX(0);
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 2px solid var(--neon-cyan);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(0, 255, 204, 0.02) 0,
+    rgba(0, 255, 204, 0.02) 1px,
+    transparent 1px,
+    transparent 10px
+  );
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  font-family: var(--mono-font);
+  text-shadow: 0 0 12px rgba(0, 255, 204, 0.3);
+}
+
+.settings-close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--neon-cyan);
+  background: transparent;
+  color: var(--neon-cyan);
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono-font);
+  transition: all 0.1s;
+  box-shadow: 2px 2px 0px rgba(0, 255, 204, 0.4);
+}
+
+.settings-close:active,
+.settings-close:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 transparent;
+  background: rgba(0, 255, 204, 0.1);
+}
+
+.settings-welcome {
+  padding: 14px 24px;
+  border-bottom: 1px solid rgba(0, 255, 204, 0.1);
+  background: rgba(0, 255, 204, 0.03);
+}
+
+.settings-welcome p {
+  margin: 0;
+  color: var(--neon-cyan);
+  font-family: var(--mono-font);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+.settings-body {
+  padding: 0;
+  flex: 1;
+}
+
+.settings-section {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(0, 255, 204, 0.06);
+}
+
+.settings-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--mono-font);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-bottom: 1px dashed rgba(0, 255, 204, 0.1);
+  padding-bottom: 8px;
+}
+
+.settings-field {
+  margin-bottom: 14px;
+}
+
+.settings-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-family: var(--mono-font);
+}
+
+.settings-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.settings-field input[type="text"],
+.settings-field input[type="password"],
+.settings-field select,
+.settings-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  color: var(--neon-cyan);
+  font-family: var(--mono-font);
+  font-size: 13px;
+  outline: none;
+  transition: all 0.15s;
+}
+
+.settings-field input:focus,
+.settings-field select:focus,
+.settings-field textarea:focus {
+  border-color: var(--neon-cyan);
+  box-shadow: inset 2px 2px 0px rgba(0, 255, 204, 0.08);
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.settings-field select {
+  appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300ffcc' stroke-width='2'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+}
+
+.settings-field textarea {
+  resize: vertical;
+  min-height: 40px;
+}
+
+.settings-input-row input {
+  flex: 1;
+}
+
+.settings-btn {
+  padding: 8px 14px;
+  border: 1px solid #555;
+  border-radius: 0;
+  background: #111;
+  color: #ddd;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--mono-font);
+  transition: all 0.1s;
+  box-shadow: 2px 2px 0px #333;
+}
+
+.settings-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 transparent;
+}
+
+.settings-btn:hover {
+  background: #1a1a1a;
+  color: #fff;
+  border-color: #888;
+}
+
+.settings-btn.primary {
+  background: var(--void-bg);
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+  box-shadow: 3px 3px 0px rgba(0, 255, 204, 0.35);
+}
+
+.settings-btn.primary:hover {
+  background: rgba(0, 255, 204, 0.05);
+}
+
+.settings-btn.primary:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 transparent;
+}
+
+.settings-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Status dots */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1px solid #444;
+  background: #111;
+  flex-shrink: 0;
+}
+
+.status-dot.status-green {
+  background: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 8px rgba(0, 255, 204, 0.5);
+}
+
+.status-dot.status-red {
+  background: var(--neon-red);
+  border-color: var(--neon-red);
+  box-shadow: 0 0 8px rgba(255, 0, 60, 0.5);
+}
+
+.status-dot.status-yellow {
+  background: var(--neon-yellow);
+  border-color: var(--neon-yellow);
+  box-shadow: 0 0 8px rgba(255, 204, 0, 0.5);
+}
+
+.status-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-color);
+  font-family: var(--mono-font);
+}
+
+.status-detail {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: var(--mono-font);
+}
+
+.sysinfo-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 14px;
+  border: 1px solid rgba(0, 255, 204, 0.08);
+}
+
+.sysinfo-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-family: var(--mono-font);
+}
+
+.sysinfo-label {
+  color: var(--text-dim);
+}
+
+.sysinfo-row span:last-child {
+  color: var(--neon-cyan);
+  font-weight: bold;
+}
+
+.setup-nav {
+  padding: 20px 24px;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 255, 204, 0.02);
+  border-top: 1px solid rgba(0, 255, 204, 0.08);
+}
+
+/* ===========================================================================
+   LLM Provider Cards
+   =========================================================================== */
+
+.provider-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.provider-card {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 255, 204, 0.1);
+  padding: 12px 10px;
+  text-align: center;
+  font-family: var(--mono-font);
+  transition: all 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+
+.provider-card.active {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 12px rgba(0, 255, 204, 0.1);
+}
+
+.provider-card.active::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--neon-cyan);
+}
+
+.provider-card .provider-name {
+  font-size: 11px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.provider-card.active .provider-name {
+  color: var(--neon-cyan);
+}
+
+.provider-card .provider-status {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #444;
+}
+
+.provider-card.available .provider-status {
+  color: var(--neon-cyan);
+}
+
+.provider-card.unavailable .provider-status {
+  color: var(--neon-red);
+}
+
+/* ===========================================================================
+   Capability Grid
+   =========================================================================== */
+
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.cap-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 10px;
+  font-family: var(--mono-font);
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+.cap-item .cap-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--neon-cyan);
+  flex-shrink: 0;
+  box-shadow: 0 0 4px rgba(0, 255, 204, 0.4);
+}
+
+.cap-item.disabled .cap-dot {
+  background: #333;
+  box-shadow: none;
+}
+
+/* ===========================================================================
+   Animations
+   =========================================================================== */
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+/* Subtle scanline on panels */
+.brutalist-panel::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 204, 0.15), transparent);
+  animation: scanline 8s linear infinite;
+  pointer-events: none;
+}
