@@ -95,7 +95,7 @@ function buildPanelHTML(): string {
           <h3>[ AI ENGINES ]</h3>
           <div class="provider-cards" id="provider-cards">
             <div class="provider-card" id="provider-nvidia">
-              <div class="provider-name">NVIDIA LLAMA</div>
+              <div class="provider-name">DEEPSEEK V4 FLASH</div>
               <div class="provider-status">--</div>
             </div>
           </div>

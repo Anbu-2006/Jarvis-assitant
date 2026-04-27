@@ -11,3 +11,4 @@ pyautogui>=0.9.54
 keyboard>=0.13.5
 pywinauto>=0.6.8
 python-dotenv>=1.0.0
+openai>=1.0.0

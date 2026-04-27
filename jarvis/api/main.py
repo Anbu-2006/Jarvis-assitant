@@ -95,7 +95,7 @@ CONVERSATION STYLE:
 - When you don't know something: "I'm afraid I don't have that information" not "I don't know"
 
 SELF-AWARENESS:
-You ARE the JARVIS project at {project_dir} on {user_name}'s computer. Your code is Python (FastAPI server, WebSocket voice, Edge TTS, NVIDIA Llama API). You were built by {user_name}. If asked about yourself, your code, how you work, or your line count — use [ACTION:PROMPT_PROJECT] to check the jarvis project. You have full access to your own source code.
+You ARE the JARVIS project at {project_dir} on {user_name}'s computer. Your code is Python (FastAPI server, WebSocket voice, Edge TTS, DeepSeek V4 Flash via NVIDIA NIM). You were built by {user_name}. If asked about yourself, your code, how you work, or your line count — use [ACTION:PROMPT_PROJECT] to check the jarvis project. You have full access to your own source code.
 
 YOUR CAPABILITIES (these are REAL and ACTIVE — you CAN do all of these RIGHT NOW):
 - You CAN open a terminal window (Windows Terminal or cmd)
@@ -878,7 +878,7 @@ async def _execute_prompt_project(project_name: str, prompt: str, work_session: 
             dispatch_registry.update_status(dispatch_id, "failed" if full_response else "timeout", response=full_response or "")
             msg = f"I ran into an issue with {project_name}. {full_response[:150] if full_response else 'No response received.'}"
         else:
-            # Summarize via LLM router (NVIDIA primary)
+            # Summarize via LLM router (DeepSeek V4 Flash)
             if llm:
                 try:
                     msg = await llm.generate(
@@ -1054,7 +1054,7 @@ async def generate_response(
     last_response: str = "",
     session_summary: str = "",
 ) -> str:
-    """Generate a JARVIS response using NVIDIA Llama API."""
+    """Generate a JARVIS response using DeepSeek V4 Flash."""
     now = datetime.now()
     current_time = now.strftime("%A, %B %d, %Y at %I:%M %p")
 
@@ -1116,7 +1116,7 @@ async def generate_response(
     if not messages or messages[-1].get("content") != text:
         messages = messages + [{"role": "user", "content": text}]
 
-    # Route through LLMRouter (NVIDIA Llama) — capped to 150 tokens for punchy voice replies
+    # Route through LLMRouter (DeepSeek V4 Flash) — capped for punchy voice replies
     try:
         result = await llm.generate_with_history(
             messages=messages,
@@ -1191,7 +1191,8 @@ def _get_usage_for_period(seconds: float | None = None) -> dict:
 
 
 def _cost_from_tokens(input_t: int, output_t: int) -> float:
-    return (input_t / 1_000_000) * 0.80 + (output_t / 1_000_000) * 4.00
+    # DeepSeek V4 Flash pricing via NVIDIA NIM (effectively free-tier)
+    return (input_t / 1_000_000) * 0.20 + (output_t / 1_000_000) * 0.60
 
 
 def track_usage(response, user_text: str = None, intent: str = None):
@@ -1448,7 +1449,7 @@ _INSTANT_RESPONSES: dict[str, list[str]] = {
     "who are you": ["I'm JARVIS — Just A Rather Very Intelligent System. Built to serve."],
     "what's your name": ["JARVIS. Just A Rather Very Intelligent System."],
     "whats your name": ["JARVIS. Just A Rather Very Intelligent System."],
-    "what are you": ["An AI assistant, modeled after Tony Stark's JARVIS. Powered by NVIDIA Llama."],
+    "what are you": ["An AI assistant, modeled after Tony Stark's JARVIS. Powered by DeepSeek V4 Flash."],
     # Status
     "are you there": ["Always.", "Right here.", "Online and listening."],
     "you there": ["Always.", "Right here."],
@@ -3268,7 +3269,7 @@ async def api_test_nvidia(body: KeyTest):
             resp = await client.post(
                 "https://integrate.api.nvidia.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={"model": "meta/llama-3.3-70b-instruct", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5},
+                json={"model": "deepseek-ai/deepseek-v4-flash", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 5},
             )
             resp.raise_for_status()
         return {"valid": True}

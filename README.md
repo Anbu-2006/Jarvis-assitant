@@ -36,7 +36,7 @@ JARVIS can browse the web, build entire projects via your IDE, see your screen, 
 - **Python 3.11+**
 - **Node.js 18+**
 - **Google Chrome** (required for Web Speech API)
-- **NVIDIA API key** — powers the AI brain ([get one here](https://build.nvidia.com/))
+- **NVIDIA API key** — powers the DeepSeek V4 Flash brain ([get one here](https://build.nvidia.com/))
 - **Windows Terminal** (optional but recommended)
 
 ## Quick Start
@@ -90,7 +90,7 @@ NVIDIA_API_KEY=your-nvidia-api-key-here
 Microphone -> Web Speech API -> WebSocket -> FastAPI -> LLM Router -> Edge-TTS -> WebSocket -> Speaker
                                                 |
                                                 v
-                                        NVIDIA Llama 3.3 70B
+                                        DeepSeek V4 Flash (NVIDIA NIM)
                                                 |
                                                 v
                                         Windows Integration
@@ -102,7 +102,7 @@ Microphone -> Web Speech API -> WebSocket -> FastAPI -> LLM Router -> Edge-TTS -
 | Backend | FastAPI + Python (`server.py`, ~2500 lines) |
 | Frontend | Vite + TypeScript + Three.js |
 | Communication | WebSocket (JSON messages + binary audio) |
-| AI | NVIDIA Llama 3.3 70B — ultra-fast inference |
+| AI | DeepSeek V4 Flash — ultra-fast reasoning with thinking |
 | TTS | Edge-TTS (free, no API key) |
 | System | PowerShell + file-based delegation for Windows |
 
@@ -150,7 +150,7 @@ JARVIS uses action tags to trigger real system actions:
 - `[ACTION:REMEMBER]` — stores a fact for future context
 
 ### LLM Engine
-JARVIS is powered exclusively by **NVIDIA NIM** running **Meta Llama 3.3 70B Instruct** — delivering ultra-fast, high-quality responses with no rate-limit juggling.
+JARVIS is powered by **DeepSeek V4 Flash** via **NVIDIA NIM** — delivering ultra-fast reasoning with deep-thinking support, streaming responses, and no rate-limit juggling.
 
 ### Memory System
 JARVIS remembers things you tell it using SQLite with FTS5 full-text search. Preferences, decisions, and facts persist across sessions.
@@ -181,7 +181,7 @@ Free for personal, non-commercial use. Commercial use requires a license — vis
 
 Built by [Ethan](https://ethanplus.ai).
 
-Powered by [NVIDIA NIM](https://build.nvidia.com/) — Llama 3.3 70B.
+Powered by [NVIDIA NIM](https://build.nvidia.com/) — DeepSeek V4 Flash.
 
 Inspired by the AI that started it all — Tony Stark's JARVIS.
 
