@@ -3384,7 +3384,7 @@ async def api_fix_self():
 from starlette.staticfiles import StaticFiles
 from starlette.responses import FileResponse
 
-FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
+FRONTEND_DIST = Path(__file__).parent.parent.parent / "frontend" / "dist"
 
 if FRONTEND_DIST.exists():
     @app.get("/")
