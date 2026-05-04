@@ -125,6 +125,14 @@ const voiceInput = createVoiceInput(
   },
   (msg: string) => {
     showError(msg);
+  },
+  () => {
+    // onBargeIn: User started speaking while JARVIS was talking
+    if (currentState === "speaking") {
+      audioPlayer.stop();
+      transition("listening");
+      addLog("SYS: Barge-in detected, playback stopped");
+    }
   }
 );
 

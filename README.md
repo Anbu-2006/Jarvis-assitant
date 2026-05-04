@@ -86,71 +86,71 @@ NVIDIA_API_KEY=your-nvidia-api-key-here
 
 ## Architecture
 
-```
-Microphone -> Web Speech API -> WebSocket -> FastAPI -> LLM Router -> Edge-TTS -> WebSocket -> Speaker
-                                                |
-                                                v
-                                        DeepSeek V4 Flash (NVIDIA NIM)
-                                                |
-                                                v
-                                        Windows Integration
-                                        (PowerShell, file delegation, local files)
+```text
+Microphone -> Web Speech API -> WebSocket -> FastAPI -> Dual-Path Inference -> Edge-TTS -> Speaker
+                                                  |                  |
+                                         Fast-Path (0ms)       Slow-Path (Complex)
+                                         MCP Tools (47+)       Ollama Llama 3.2 (Local)
+                                         Instant Cache         NVIDIA NIM (Fallback)
 ```
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | FastAPI + Python (`server.py`, ~2500 lines) |
-| Frontend | Vite + TypeScript + Three.js |
+| Backend | FastAPI + Python (`main.py`, ~4000 lines) |
+| Frontend | Vite + TypeScript + Three.js + Brutalist HUD |
 | Communication | WebSocket (JSON messages + binary audio) |
-| AI | DeepSeek V4 Flash — ultra-fast reasoning with thinking |
-| TTS | Edge-TTS (free, no API key) |
-| System | PowerShell + file-based delegation for Windows |
+| Inference Core | Dual-Path Engine (Local Ollama Llama 3.2 + NVIDIA Fallback) |
+| System Control| MCP Server (47+ Native OS Automation Tools) |
+| TTS | Edge-TTS (free, high-quality neural voices) |
+| Memory | SQLite with FTS5 Full-Text Search |
 
-## How the Voice Loop Works
+## How the Zero-Latency Loop Works
 
-1. You speak into your microphone
-2. Chrome's Web Speech API transcribes your speech in real-time
-3. The transcript is sent to the server via WebSocket
-4. JARVIS detects intent — conversation, action, or build request
-5. For actions: prepares project workspace or runs system commands
-6. Generates a response via LLM router (auto-selects best available provider)
-7. Edge-TTS converts the response to speech with the JARVIS voice
-8. Audio streams back to the browser via WebSocket
-9. The Three.js orb deforms and pulses in response to the audio
-10. Background tasks notify you proactively when they complete
+1. You speak into your microphone.
+2. Web Speech API transcribes your speech in real-time.
+3. The transcript is sent to the server via WebSocket.
+4. JARVIS evaluates intent with **Dual-Path Routing**:
+   - **Instant Cache (0ms):** Matches 50+ common phrases ("yo", "how are you") directly to predefined responses.
+   - **Fast-Path MCP (0ms):** Intercepts OS commands (weather, brightness, volume, ping, calculator, app launch) and executes Python tools instantly without touching the LLM.
+   - **Local Inference:** Routes complex conversational queries to a local **Ollama (Llama 3.2)** instance with heavily pruned context for lightning-fast replies on consumer GPUs (e.g., RTX 3050).
+5. Edge-TTS converts the response to speech with the JARVIS voice.
+6. Audio streams back to the browser via WebSocket and the Three.js orb deforms to the audio.
+7. **Barge-in:** If you interrupt JARVIS while he is speaking, playback instantly stops and he listens to your new command.
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `server.py` | Main server — WebSocket handler, LLM, action system |
-| `llm_router.py` | Multi-provider LLM router with automatic failover |
+| `jarvis/api/main.py` | Main server — WebSocket handler, Fast-path logic, and Instant Cache |
+| `jarvis/core/llm_router.py` | Hybrid local/cloud routing engine with extreme context pruning |
+| `jarvis/mcp_server.py` | Native Windows OS automation tools (47+ professional-grade tools) |
+| `jarvis/mcp_client.py` | Bridge executing MCP tools in-memory for zero latency |
 | `frontend/src/orb.ts` | Three.js particle orb visualization |
-| `frontend/src/voice.ts` | Web Speech API + audio playback |
-| `frontend/src/main.ts` | Frontend state machine |
-| `memory.py` | SQLite memory system with FTS5 full-text search |
-| `calendar_access.py` | Calendar integration (stub on Windows) |
-| `mail_access.py` | Mail integration (stub on Windows, read-only design) |
-| `notes_access.py` | Local markdown notes in `data/notes/` |
-| `actions.py` | System actions (Terminal, Browser, IDE delegation) |
-| `browser.py` | Playwright web automation |
-| `work_mode.py` | Project-focused work sessions |
-| `screen.py` | Window detection + screenshots via PowerShell/Pillow |
-| `planner.py` | Multi-step task planning with smart questions |
+| `frontend/src/voice.ts` | Web Speech API + audio playback + **Barge-in** |
+| `frontend/src/settings.ts` | Brutalist UI for API Key management and diagnostic HUD |
 
 ## Features in Detail
 
-### Action System
-JARVIS uses action tags to trigger real system actions:
-- `[ACTION:BUILD]` — prepares a project workspace for your IDE
-- `[ACTION:BROWSE]` — opens the browser to a URL or search query
-- `[ACTION:RESEARCH]` — deep research with LLM, outputs an HTML report
-- `[ACTION:PROMPT_PROJECT]` — connects to an existing project
-- `[ACTION:ADD_TASK]` — creates a tracked task with priority and due date
-- `[ACTION:REMEMBER]` — stores a fact for future context
+### Zero-Latency Local SLM Engine
+JARVIS was specifically re-architected to run locally on an RTX 3050. By aggressively pruning context, limiting token generation to 150 words, and bypassing expensive OS system calls during local inference, JARVIS achieves near-instantaneous response times using Ollama (`llama3.2:3b`).
 
-### LLM Engine
-JARVIS is powered by **DeepSeek V4 Flash** via **NVIDIA NIM** — delivering ultra-fast reasoning with deep-thinking support, streaming responses, and no rate-limit juggling.
+### Extreme OS Automation (47+ MCP Tools)
+The Model Context Protocol (MCP) server replaces fragile scripts with robust Python libraries. JARVIS can instantly:
+- Control system hardware (Brightness, Volume, Power states, Ping, Disk Usage)
+- Manage files and workspaces (Create, Read, Search codebase)
+- Interact with applications (Open, Close, List active windows, Spotify control)
+- Compute and connect (Web search, Weather, Timers, Notifications, Unit conversion)
+
+### Brutalist HUD & Settings
+A built-in frontend settings panel allows you to hot-swap API keys, monitor system health, check active tasks, and view live memory fragmentation stats without touching configuration files.
+
+### Action System
+JARVIS uses action tags to trigger deep system actions:
+- `[ACTION:PROMPT_PROJECT]` — Connects to an existing code project
+- `[ACTION:BUILD]` — Prepares a project workspace for your IDE
+- `[ACTION:RESEARCH]` — Deep web research with an HTML report
+- `[ACTION:ADD_TASK]` — Creates a tracked task with priority and due date
+- `[ACTION:REMEMBER]` — Stores a fact for future context
 
 ### Memory System
 JARVIS remembers things you tell it using SQLite with FTS5 full-text search. Preferences, decisions, and facts persist across sessions.

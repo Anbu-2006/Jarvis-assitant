@@ -115,11 +115,29 @@ function buildPanelHTML(): string {
           </div>
 
           <div class="settings-field">
+            <label>GROQ API KEY _(Secondary / Whisper)</label>
+            <div class="settings-input-row">
+              <input type="password" id="input-groq-key" placeholder="gsk_..." />
+              <button class="settings-btn" id="btn-test-groq">TEST</button>
+              <span class="status-dot" id="status-groq"></span>
+            </div>
+          </div>
+
+          <div class="settings-field">
             <label>GEMINI API KEY _(Vision Fallback)</label>
             <div class="settings-input-row">
               <input type="password" id="input-gemini-key" placeholder="AIzaSy..." />
               <button class="settings-btn" id="btn-test-gemini">TEST</button>
               <span class="status-dot" id="status-gemini"></span>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <label>OPENROUTER KEY _(Free Fallback)</label>
+            <div class="settings-input-row">
+              <input type="password" id="input-openrouter-key" placeholder="sk-or-v1-..." />
+              <button class="settings-btn" id="btn-test-openrouter">TEST</button>
+              <span class="status-dot" id="status-openrouter"></span>
             </div>
           </div>
 
@@ -239,12 +257,31 @@ function updateProviderCards(status: StatusResponse) {
 
   const mapping: Record<string, string> = {
     nvidia: "provider-nvidia",
+    groq: "provider-groq",
+    gemini: "provider-gemini",
+    openrouter: "provider-openrouter",
   };
 
   for (const provider of providers) {
     const cardId = mapping[provider.name.toLowerCase()];
     if (!cardId) continue;
-    const card = document.getElementById(cardId);
+    
+    // Create card if it doesn't exist yet but we have the data
+    let card = document.getElementById(cardId);
+    if (!card) {
+      const container = document.getElementById("provider-cards");
+      if (container) {
+        card = document.createElement("div");
+        card.id = cardId;
+        card.className = "provider-card";
+        card.innerHTML = `
+          <div class="provider-name">${provider.name.toUpperCase()}</div>
+          <div class="provider-status">--</div>
+        `;
+        container.appendChild(card);
+      }
+    }
+    
     if (!card) continue;
 
     card.classList.remove("active", "available", "unavailable");
@@ -293,7 +330,11 @@ async function loadStatus() {
 
     // API key status dots
     setDotStatus("status-nvidia", status.env_keys_set.nvidia ? "green" : "red");
+    // @ts-ignore
+    setDotStatus("status-groq", status.env_keys_set.groq ? "green" : "red");
     setDotStatus("status-gemini", status.env_keys_set.gemini ? "green" : "yellow");
+    // @ts-ignore
+    setDotStatus("status-openrouter", status.env_keys_set.openrouter ? "green" : "yellow");
 
     // Provider cards
     updateProviderCards(status);
@@ -370,8 +411,14 @@ function wireEvents() {
     const nvidiaKey = (document.getElementById("input-nvidia-key") as HTMLInputElement).value.trim();
     if (nvidiaKey) await apiPost("/api/settings/keys", { key_name: "NVIDIA_API_KEY", key_value: nvidiaKey });
 
+    const groqKey = (document.getElementById("input-groq-key") as HTMLInputElement).value.trim();
+    if (groqKey) await apiPost("/api/settings/keys", { key_name: "GROQ_API_KEY", key_value: groqKey });
+
     const geminiKey = (document.getElementById("input-gemini-key") as HTMLInputElement).value.trim();
     if (geminiKey) await apiPost("/api/settings/keys", { key_name: "GEMINI_API_KEY", key_value: geminiKey });
+
+    const openrouterKey = (document.getElementById("input-openrouter-key") as HTMLInputElement).value.trim();
+    if (openrouterKey) await apiPost("/api/settings/keys", { key_name: "OPENROUTER_API_KEY", key_value: openrouterKey });
 
     await loadStatus();
   });
@@ -388,16 +435,39 @@ function wireEvents() {
     }
   });
 
+  // Test Groq
+  document.getElementById("btn-test-groq")?.addEventListener("click", async () => {
+    setDotStatus("status-groq", "yellow");
+    const key = (document.getElementById("input-groq-key") as HTMLInputElement).value.trim();
+    try {
+      if (key) await apiPost("/api/settings/keys", { key_name: "GROQ_API_KEY", key_value: key });
+      setDotStatus("status-groq", key ? "green" : "yellow");
+    } catch {
+      setDotStatus("status-groq", "red");
+    }
+  });
+
   // Test Gemini
   document.getElementById("btn-test-gemini")?.addEventListener("click", async () => {
     setDotStatus("status-gemini", "yellow");
     const key = (document.getElementById("input-gemini-key") as HTMLInputElement).value.trim();
     try {
-      // Send a dummy post just to test or save
       if (key) await apiPost("/api/settings/keys", { key_name: "GEMINI_API_KEY", key_value: key });
       setDotStatus("status-gemini", key ? "green" : "yellow");
     } catch {
       setDotStatus("status-gemini", "red");
+    }
+  });
+
+  // Test OpenRouter
+  document.getElementById("btn-test-openrouter")?.addEventListener("click", async () => {
+    setDotStatus("status-openrouter", "yellow");
+    const key = (document.getElementById("input-openrouter-key") as HTMLInputElement).value.trim();
+    try {
+      if (key) await apiPost("/api/settings/keys", { key_name: "OPENROUTER_API_KEY", key_value: key });
+      setDotStatus("status-openrouter", key ? "green" : "yellow");
+    } catch {
+      setDotStatus("status-openrouter", "red");
     }
   });
 

@@ -18,7 +18,8 @@ declare const webkitSpeechRecognition: any;
 
 export function createVoiceInput(
   onTranscript: (text: string) => void,
-  onError: (msg: string) => void
+  onError: (msg: string) => void,
+  onBargeIn?: () => void
 ): VoiceInput {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const SR = (window as any).SpeechRecognition || (typeof webkitSpeechRecognition !== "undefined" ? webkitSpeechRecognition : null);
@@ -36,11 +37,20 @@ export function createVoiceInput(
   let paused = false;
 
   recognition.onresult = (event: any) => {
+    let hasInterim = false;
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
         const text = event.results[i][0].transcript.trim();
         if (text) onTranscript(text);
+      } else {
+        const interimText = event.results[i][0].transcript.trim();
+        if (interimText.length > 2) hasInterim = true;
       }
+    }
+    
+    // Trigger barge-in (interrupt JARVIS) if we clearly detect the user speaking
+    if (hasInterim && onBargeIn) {
+      onBargeIn();
     }
   };
 

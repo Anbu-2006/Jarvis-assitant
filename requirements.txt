@@ -12,3 +12,11 @@ keyboard>=0.13.5
 pywinauto>=0.6.8
 python-dotenv>=1.0.0
 openai>=1.0.0
+# ── New: MCP Server & Intelligence ──
+fastmcp>=0.4.0
+psutil>=5.9.0
+feedparser>=6.0.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+# ── New: Multi-LLM Fallback ──
+groq>=0.11.0

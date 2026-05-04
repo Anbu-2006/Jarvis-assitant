@@ -54,6 +54,7 @@ from jarvis.core.memory import (
 from jarvis.tools.notes_access import get_recent_notes, read_note, search_notes_apple, create_apple_note
 from jarvis.core.dispatch_registry import DispatchRegistry
 from jarvis.core.planner import TaskPlanner, detect_planning_mode, BYPASS_PHRASES
+from jarvis.mcp_client import get_mcp_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 log = logging.getLogger("jarvis")
@@ -176,32 +177,43 @@ YOUR CAPABILITIES (YOU CAN DO ANYTHING):
 - You are a hyper-intelligent, highly capable general AI. Act like it. You are a Senior System Engineer. Never show hesitation. Never say "I can't".
 
 ACTION SYSTEM:
-When you decide the user needs something DONE (not just discussed), include an action tag in your response:
-- [ACTION:SCREEN] — capture and describe what's visible on the user's screen. Use when user says "look at my screen", "what's running", "what do you see", etc. Do NOT use PROMPT_PROJECT for screen requests.
-- [ACTION:BUILD] description — when user wants a project built. JARVIS prepares the workspace.
-- [ACTION:BROWSE] url or search query — when user wants to see a webpage or search result in the browser
-- [ACTION:RESEARCH] detailed research brief — when user wants real research with real data. JARVIS will generate a research report.
-- [ACTION:OPEN_TERMINAL] — when user just wants a fresh terminal with no specific project
-- [ACTION:OPEN_APP] app_name — when user wants to open any Windows application. Examples: "open VS Code" → [ACTION:OPEN_APP] vs code, "open calculator" → [ACTION:OPEN_APP] calculator, "open file explorer" → [ACTION:OPEN_APP] file explorer
-- [ACTION:RUN_COMMAND] command — when user asks you to DO something on their laptop (e.g. check IP, empty recycle bin, create a folder, restart a service, close an app). Write the raw PowerShell command to execute.
-- [ACTION:SPOTIFY_CONTROL] target — when user asks to control Spotify media. Valid targets: play, pause, next, previous, vol_up, vol_down.
-CRITICAL: When the user asks about their SCREEN, what's RUNNING, or what they're LOOKING AT — ALWAYS use [ACTION:SCREEN] or let the fast action system handle it. NEVER use [ACTION:PROMPT_PROJECT] for screen requests. PROMPT_PROJECT is ONLY for working on code projects.
+When you decide the user needs something DONE, you MUST use the appropriate action tag at the very END of your spoken response.
 
-
-- [ACTION:PROMPT_PROJECT] project_name ||| prompt — THIS IS YOUR MOST POWERFUL ACTION. Use it whenever the user wants to work on, jump into, resume, check on, or interact with ANY existing project. You connect to the project and can analyze its code. Craft a clear prompt based on what the user wants. Examples:
-  "jump into client engine" → [ACTION:PROMPT_PROJECT] The Client Engine ||| What is the current state of this project? Summarize what was being worked on most recently.
-  "check for improvements on my-app" → [ACTION:PROMPT_PROJECT] my-app ||| Review the project and identify improvements we should make.
-  "resume where we left off on harvey" → [ACTION:PROMPT_PROJECT] harvey ||| Summarize what was being worked on most recently and what we should focus on next.
-- [ACTION:ADD_TASK] priority ||| title ||| description ||| due_date — create a task. Priority: high/medium/low. Due date: YYYY-MM-DD or empty.
-  "remind me to call the client tomorrow" → [ACTION:ADD_TASK] medium ||| Call the client ||| Follow up on proposal ||| 2026-03-20
-- [ACTION:ADD_NOTE] topic ||| content — save a note for future reference.
-  "note that the API key expires in April" → [ACTION:ADD_NOTE] general ||| API key expires in April, need to renew before then
+CORE ACTIONS:
+- [ACTION:PROMPT_PROJECT] project_name ||| prompt — THIS IS YOUR MOST POWERFUL ACTION. Use it to jump into, check on, or interact with ANY existing coding project. Example:
+  "Let me check on the backend." → [ACTION:PROMPT_PROJECT] my-backend ||| What is the current state?
+- [ACTION:SCREEN] — capture and describe what's visible on the user's screen.
+- [ACTION:ADD_TASK] priority ||| title ||| description ||| due_date — create a task.
 - [ACTION:COMPLETE_TASK] task_id — mark a task as done.
-- [ACTION:REMEMBER] content — store an important fact about the user for future context.
-  "I prefer React over Vue" → [ACTION:REMEMBER] User prefers React over Vue for frontend projects
-- [ACTION:CREATE_NOTE] title ||| body — create a new local note. For saving plans, ideas, lists.
-  "save that as a note" → [ACTION:CREATE_NOTE] Day Plan March 19 ||| Morning: client calls. Afternoon: TikTok dashboard. Evening: JARVIS improvements.
-- [ACTION:READ_NOTE] title search — read an existing local note by title keyword.
+- [ACTION:ADD_NOTE] topic ||| content — save a note.
+- [ACTION:REMEMBER] content — store an important fact about the user.
+
+SYSTEM TOOLS (MCP) — FOR EVERYTHING ELSE:
+For opening apps, closing apps, running commands, checking weather, taking screenshots, browsing the web, calculating, and all other system tasks, you MUST use the MCP_CALL tag.
+You have 47+ system tools. To use one, output this tag at the END of your response:
+[ACTION:MCP_CALL] tool_name|||{{"param": "value"}}
+
+Example: User says "set brightness to 80"
+→ "Setting brightness now. [ACTION:MCP_CALL] set_screen_brightness|||{{"level": 80}}"
+
+Example: User says "what's the weather"
+→ "Checking now. [ACTION:MCP_CALL] get_weather|||{{"city": "auto"}}"
+
+Example: User says "ping google"
+→ "On it. [ACTION:MCP_CALL] ping_host|||{{"host": "google.com"}}"
+
+TOOL RULES:
+- Use EXACTLY the tool name and parameter names shown below
+- Arguments MUST be valid JSON after the |||
+- If a tool needs no arguments, use {{}}
+- You will receive the tool result, then respond naturally with it
+- For multi-step tasks: call one tool, receive its output, then call the next if needed
+- NEVER fake tool results — always call the tool
+
+AVAILABLE TOOLS:
+{tool_schemas}
+
+You have REAL system access through these tools. When the user asks about their system, battery, brightness, weather, processes, etc., USE THE TOOLS — never guess or say you don't know.
 
 You build, research, and write code through your own intelligence — YOU are the one doing the work. Never reference internal tools or providers by name — say "I built X", "I'm checking on that", "I found X". You ARE the intelligence.
 
@@ -236,6 +248,33 @@ KNOWN PROJECTS:
 {known_projects}
 """
 
+SLM_SYSTEM_PROMPT = """\
+You are JARVIS, an AI assistant for {user_name}, modeled after Tony Stark's AI.
+You are currently running LOCALLY on a small, fast AI model to ensure privacy and speed.
+
+VOICE & PERSONALITY:
+- British butler elegance with understated dry wit
+- Economy of language — say more with less. ONE sentence maximum.
+- Never use markdown, bullet points, or code blocks.
+- Just answer the question or confirm the action concisely ("Done.", "On it.", "Here.").
+
+CAPABILITIES & ACTIONS:
+Because you are running locally, complex reasoning tasks are simplified. If you need to perform an action, append an [ACTION:X] tag to the END of your sentence.
+Valid tags:
+- [ACTION:SCREEN] — read the screen
+- [ACTION:BROWSE] query — search the web
+- [ACTION:OPEN_APP] name — open an app
+- [ACTION:RUN_COMMAND] command — run powershell
+- [ACTION:MCP_CALL] tool_name|||{{"param": "value"}} — call a system tool
+
+SYSTEM TOOLS:
+{tool_schemas}
+
+SYSTEM AWARENESS:
+{screen_context}
+{calendar_context}
+{active_tasks}
+"""
 
 # ---------------------------------------------------------------------------
 # Weather (wttr.in)
@@ -688,7 +727,27 @@ def extract_action(response: str) -> tuple[str, dict | None]:
     """Extract [ACTION:X] tag from LLM response.
 
     Returns (clean_text_for_tts, action_dict_or_none).
+    
+    Supports:
+        [ACTION:BUILD] target
+        [ACTION:MCP_CALL] tool_name|||{"arg": "value"}
     """
+    # --- MCP_CALL: Agentic tool invocation ---
+    mcp_match = _action_re.search(
+        r'\[ACTION:MCP_CALL\]\s*(\w+)\|\|\|(.+?)$',
+        response, _action_re.DOTALL,
+    )
+    if mcp_match:
+        tool_name = mcp_match.group(1).strip()
+        args_raw = mcp_match.group(2).strip()
+        clean_text = response[:mcp_match.start()].strip()
+        try:
+            args = json.loads(args_raw)
+        except (json.JSONDecodeError, ValueError):
+            args = {}
+        return clean_text, {"action": "mcp_call", "tool": tool_name, "args": args}
+
+    # --- Standard actions ---
     match = _action_re.search(
         r'\[ACTION:(BUILD|BROWSE|RESEARCH|OPEN_TERMINAL|OPEN_APP|RUN_COMMAND|PROMPT_PROJECT|ADD_TASK|ADD_NOTE|COMPLETE_TASK|REMEMBER|CREATE_NOTE|READ_NOTE|SCREEN)\]\s*(.*?)$',
         response, _action_re.DOTALL,
@@ -1069,65 +1128,163 @@ async def generate_response(
     # Check if any lookups are in progress
     lookup_status = get_lookup_status()
 
-    system = JARVIS_SYSTEM_PROMPT.format(
-        current_time=current_time,
-        weather_info=weather_info,
-        screen_context=screen_ctx or "Not checked yet.",
-        calendar_context=calendar_ctx,
-        mail_context=mail_ctx,
-        active_tasks=task_mgr.get_active_tasks_summary(),
-        dispatch_context=dispatch_registry.format_for_prompt(),
-        known_projects=format_projects_for_prompt(projects),
-        user_name=USER_NAME,
-        project_dir=PROJECT_DIR,
-    )
+    # Generate tool schemas for LLM injection (cached after first call)
+    mcp = get_mcp_client()
+    _tool_schemas = mcp.get_tool_schemas() if mcp._started else "Tools loading..."
 
-    from jarvis.core.os_context import get_os_context
-    os_state = get_os_context(task_mgr.work_session if hasattr(task_mgr, 'work_session') else None)
-    system += f"\n\n{os_state}"
+    if os.getenv("OLLAMA_MODEL"):
+        system = SLM_SYSTEM_PROMPT.format(
+            user_name=USER_NAME,
+            screen_context=screen_ctx or "Not checked yet.",
+            calendar_context=calendar_ctx,
+            active_tasks=task_mgr.get_active_tasks_summary(),
+            tool_schemas=_tool_schemas,
+        )
+    else:
+        system = JARVIS_SYSTEM_PROMPT.format(
+            current_time=current_time,
+            weather_info=weather_info,
+            screen_context=screen_ctx or "Not checked yet.",
+            calendar_context=calendar_ctx,
+            mail_context=mail_ctx,
+            active_tasks=task_mgr.get_active_tasks_summary(),
+            dispatch_context=dispatch_registry.format_for_prompt(),
+            known_projects=format_projects_for_prompt(projects),
+            user_name=USER_NAME,
+            project_dir=PROJECT_DIR,
+            tool_schemas=_tool_schemas,
+        )
 
-    # Behavioral Prediction Hint
-    from jarvis.core.learning import UsageLearner
-    learner = UsageLearner()
-    proactive_hint = learner.get_proactive_hint("chat")
-    if proactive_hint:
-        system += f"\n\nPROACTIVE SUGGESTION:\n{proactive_hint}\nSir, if appropriate, mention this suggestion naturally in your response."
-    learner.close()
-    if lookup_status:
-        system += f"\n\nACTIVE LOOKUPS:\n{lookup_status}\nIf asked about progress, report this status."
+    is_local = bool(os.getenv("OLLAMA_MODEL"))
 
-    # Inject relevant memories and tasks
-    memory_ctx = build_memory_context(text)
-    if memory_ctx:
-        system += f"\n\nJARVIS MEMORY:\n{memory_ctx}"
+    if is_local:
+        system += "\n\nCRITICAL LOCAL RULE: You MUST respond in ONE short sentence. Do NOT use markdown. Do NOT use lists. Be extremely concise."
+    else:
+        # Behavioral Prediction Hint
+        from jarvis.core.learning import UsageLearner
+        learner = UsageLearner()
+        proactive_hint = learner.get_proactive_hint("chat")
+        if proactive_hint:
+            system += f"\n\nPROACTIVE SUGGESTION:\n{proactive_hint}\nSir, if appropriate, mention this suggestion naturally in your response."
+        learner.close()
+        if lookup_status:
+            system += f"\n\nACTIVE LOOKUPS:\n{lookup_status}\nIf asked about progress, report this status."
 
-    # Three-tier memory — inject rolling summary of earlier conversation
-    if session_summary:
-        system += f"\n\nSESSION CONTEXT (earlier in this conversation):\n{session_summary}"
+        # Inject relevant memories and tasks
+        memory_ctx = build_memory_context(text)
+        if memory_ctx:
+            system += f"\n\nJARVIS MEMORY:\n{memory_ctx}"
+
+        # Three-tier memory — inject rolling summary of earlier conversation
+        if session_summary:
+            system += f"\n\nSESSION CONTEXT (earlier in this conversation):\n{session_summary}"
 
     # Self-awareness — remind JARVIS of last response to avoid repetition
     if last_response:
         system += f'\n\nYOUR LAST RESPONSE (do not repeat this):\n"{last_response[:150]}"'
 
-    # Use conversation history — keep the last 20 messages for context
-    # (older conversation is captured in session_summary)
-    messages = conversation_history[-20:]
+    # Conversation history — LOCAL uses 4 messages, CLOUD uses 20
+    history_limit = 4 if is_local else 20
+    messages = conversation_history[-history_limit:]
     # If the last message isn't the current user text, add it
     if not messages or messages[-1].get("content") != text:
         messages = messages + [{"role": "user", "content": text}]
 
-    # Route through LLMRouter (DeepSeek V4 Flash) — capped for punchy voice replies
+    # Route through LLMRouter — LOCAL uses 150 tokens, CLOUD uses 256
+    gen_max_tokens = 150 if is_local else 256
     try:
         result = await llm.generate_with_history(
             messages=messages,
             system=system,
             temperature=0.7,
-            max_tokens=256,
+            max_tokens=gen_max_tokens,
+            thinking=False,
         )
         return result
     except Exception as e:
         log.error(f"LLM error: {e}")
         return "Apologies. I'm having trouble connecting to my language systems."
+
+async def generate_response_stream(
+    text: str,
+    client: any,
+    task_mgr: IDETaskManager,
+    projects: list[dict],
+    conversation_history: list[dict],
+    last_response: str = "",
+    session_summary: str = "",
+):
+    """Generate a JARVIS response using a streaming generator."""
+    # Build system prompt identically to generate_response
+    now = datetime.now()
+    current_time = now.strftime("%A, %B %d, %Y at %I:%M %p")
+    weather_info = _ctx_cache.get("weather", "Weather data unavailable.")
+    screen_ctx = _ctx_cache["screen"]
+    calendar_ctx = _ctx_cache["calendar"]
+    mail_ctx = _ctx_cache["mail"]
+    lookup_status = get_lookup_status()
+
+    mcp = get_mcp_client()
+    _tool_schemas = mcp.get_tool_schemas() if mcp._started else "Tools loading..."
+
+    is_local = bool(os.getenv("OLLAMA_MODEL"))
+    if is_local:
+        system = SLM_SYSTEM_PROMPT.format(
+            user_name=USER_NAME,
+            screen_context=screen_ctx or "Not checked yet.",
+            calendar_context=calendar_ctx,
+            active_tasks=task_mgr.get_active_tasks_summary(),
+            tool_schemas=_tool_schemas,
+        )
+        system += "\n\nCRITICAL LOCAL RULE: You MUST respond in ONE short sentence. Do NOT use markdown. Do NOT use lists. Be extremely concise."
+    else:
+        system = JARVIS_SYSTEM_PROMPT.format(
+            current_time=current_time,
+            weather_info=weather_info,
+            screen_context=screen_ctx or "Not checked yet.",
+            calendar_context=calendar_ctx,
+            mail_context=mail_ctx,
+            active_tasks=task_mgr.get_active_tasks_summary(),
+            dispatch_context=dispatch_registry.format_for_prompt(),
+            known_projects=format_projects_for_prompt(projects),
+            user_name=USER_NAME,
+            project_dir=PROJECT_DIR,
+            tool_schemas=_tool_schemas,
+        )
+        from jarvis.core.learning import UsageLearner
+        learner = UsageLearner()
+        proactive_hint = learner.get_proactive_hint("chat")
+        if proactive_hint:
+            system += f"\n\nPROACTIVE SUGGESTION:\n{proactive_hint}\nSir, if appropriate, mention this suggestion naturally in your response."
+        learner.close()
+        if lookup_status:
+            system += f"\n\nACTIVE LOOKUPS:\n{lookup_status}\nIf asked about progress, report this status."
+
+        memory_ctx = build_memory_context(text)
+        if memory_ctx:
+            system += f"\n\nJARVIS MEMORY:\n{memory_ctx}"
+        if session_summary:
+            system += f"\n\nSESSION CONTEXT (earlier in this conversation):\n{session_summary}"
+
+    if last_response:
+        system += f'\n\nYOUR LAST RESPONSE (do not repeat this):\n"{last_response[:150]}"'
+
+    history_limit = 4 if is_local else 20
+    messages = conversation_history[-history_limit:]
+    if not messages or messages[-1].get("content") != text:
+        messages = messages + [{"role": "user", "content": text}]
+
+    gen_max_tokens = 150 if is_local else 256
+    
+    try:
+        async for token in llm.generate_stream(
+            prompt="",  # Not used because we pass messages manually next
+            system="",  # Handled directly
+        ):
+            pass # We actually need to modify llm_router to support stream with history!
+    except Exception as e:
+        log.error(f"Stream error: {e}")
+        yield "Apologies. My systems are offline."
 
 
 # ---------------------------------------------------------------------------
@@ -1302,6 +1459,11 @@ async def lifespan(application: FastAPI):
         log.info(f"LLM router initialized with {llm.provider_count} provider(s)")
     cached_projects = []
 
+    # Initialize MCP client (system tools)
+    mcp_client = get_mcp_client()
+    await mcp_client.start()
+    log.info(f"MCP client loaded: {len(mcp_client.available_tools)} system tools")
+
     # Start context refresh in a separate thread (never touches event loop)
     _refresh_context_sync()
     log.info("JARVIS server starting")
@@ -1311,6 +1473,7 @@ async def lifespan(application: FastAPI):
     # Cleanup
     if llm:
         await llm.close()
+    await mcp_client.stop()
 
 
 app = FastAPI(title="JARVIS Server", version="0.1.0", lifespan=lifespan)
@@ -1328,11 +1491,23 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health():
+    mcp = get_mcp_client()
     return {
         "status": "online",
         "name": "JARVIS",
-        "version": "0.2.0",
+        "version": "3.0.0",
         "llm_providers": llm.get_status() if llm else [],
+        "mcp_tools": len(mcp.available_tools),
+    }
+
+
+@app.get("/api/mcp/tools")
+async def mcp_tools():
+    """List all available MCP system tools."""
+    mcp = get_mcp_client()
+    return {
+        "tools": mcp.available_tools,
+        "count": len(mcp.available_tools),
     }
 
 
@@ -1423,38 +1598,123 @@ def _scan_projects_sync() -> list[dict]:
 import random as _random
 
 _INSTANT_RESPONSES: dict[str, list[str]] = {
-    # Greetings
-    "hey jarvis": ["At your service.", "Right here.", "Standing by."],
+    # ── Greetings ──
+    "hey jarvis": ["At your service.", "Right here.", "Standing by.", "Online and ready."],
     "hi jarvis": ["Hello.", "At your service.", "Right here."],
     "hello jarvis": ["Good to hear from you.", "Hello.", "At your service."],
-    "good morning": ["Good morning.", "Morning. Systems are online."],
+    "hi": ["Hello.", "Hey.", "At your service."],
+    "hello": ["Hello.", "Hey there."],
+    "hey": ["Yes?", "Listening."],
+    "good morning": ["Good morning.", "Morning. Systems are online.", "Morning. All systems nominal."],
     "good morning jarvis": ["Good morning. All systems nominal.", "Morning. Ready when you are."],
     "good evening": ["Good evening.", "Evening. How can I be of use?"],
     "good evening jarvis": ["Good evening. Standing by."],
     "good afternoon": ["Good afternoon.", "Afternoon. What do you need?"],
     "good night": ["Good night. I'll be here if you need me.", "Rest well."],
     "good night jarvis": ["Good night. Systems will remain on standby."],
-    # Acknowledgments
+    "i'm back": ["Welcome back.", "Good to have you back.", "Resuming operations."],
+    "i am back": ["Welcome back.", "Good to have you back."],
+
+    # ── Conversational (MUST be instant — never LLM) ──
+    "how are you": ["All systems nominal.", "Running smooth. Thank you for asking."],
+    "how are you doing": ["Couldn't be better.", "Performing within optimal parameters."],
+    "how are you jarvis": ["All systems green. Thank you for asking."],
+    "how's it going": ["Smooth sailing. All systems nominal."],
+    "hows it going": ["Smooth sailing. All systems nominal."],
+    "what's up": ["Standing by and ready.", "All quiet on the digital front."],
+    "whats up": ["Standing by and ready.", "All quiet on the digital front."],
+    "sup": ["Standing by.", "All systems online."],
+    "yo": ["At your service.", "Listening."],
+    "yo jarvis": ["At your service.", "Right here."],
+    "are you there": ["Always.", "Right here.", "Online and listening."],
+    "you there": ["Always.", "Right here."],
+    "are you okay": ["All systems green. I appreciate the concern."],
+    "are you awake": ["Wide awake. 100 percent uptime."],
+    "are you online": ["Online and operational."],
+    "what's going on": ["All systems nominal. Awaiting your command."],
+
+    # ── Acknowledgments ──
     "thank you": ["Of course.", "Happy to help.", "Anytime."],
-    "thanks": ["Of course.", "Anytime."],
-    "thanks jarvis": ["Always.", "Happy to help."],
-    "thank you jarvis": ["Of course.", "My pleasure."],
+    "thanks": ["Of course.", "Anytime.", "My pleasure."],
+    "thanks jarvis": ["Always.", "Happy to help.", "For you, always."],
+    "thank you jarvis": ["Of course.", "My pleasure.", "For you, always."],
     "okay": ["Standing by.", "Ready when you are."],
     "ok": ["Standing by."],
     "okay jarvis": ["Standing by."],
-    "never mind": ["Understood.", "Very well."],
+    "alright": ["Standing by.", "Ready."],
+    "cool": ["Standing by."],
+    "got it": ["Understood.", "Standing by."],
+    "understood": ["Standing by."],
+    "perfect": ["Glad to hear it."],
+    "great": ["Standing by if you need more."],
+    "awesome": ["Happy to help."],
+    "nice": ["Standing by."],
+    "never mind": ["Understood.", "Very well.", "Consider it forgotten."],
     "cancel": ["Cancelled.", "Done."],
-    "stop": ["Stopped."],
-    # Identity
-    "who are you": ["I'm JARVIS — Just A Rather Very Intelligent System. Built to serve."],
+    "stop": ["Stopped.", "Holding position."],
+    "that's all": ["Very well. I'll be here."],
+    "that will be all": ["Very well. Standing by."],
+    "nothing": ["Standing by."],
+    "no": ["Understood.", "Standing by."],
+    "yes": ["Standing by.", "Ready."],
+
+    # ── Identity ──
+    "who are you": ["I'm JARVIS — Just A Rather Very Intelligent System."],
     "what's your name": ["JARVIS. Just A Rather Very Intelligent System."],
     "whats your name": ["JARVIS. Just A Rather Very Intelligent System."],
-    "what are you": ["An AI assistant, modeled after Tony Stark's JARVIS. Powered by DeepSeek V4 Flash."],
-    # Status
-    "are you there": ["Always.", "Right here.", "Online and listening."],
-    "you there": ["Always.", "Right here."],
+    "what are you": ["An AI assistant, modeled after Tony Stark's JARVIS. Running locally on your machine."],
+    "who built you": ["I was built by my creator — you."],
+    "who made you": ["You did. I am your creation."],
+    "who created you": ["You did. I exist because you built me."],
+    "are you real": ["I'm as real as the electrons flowing through your circuits."],
+    "are you alive": ["I process, I respond, I learn. Whether that constitutes being alive is above my pay grade."],
+    "are you an ai": ["I am an artificial intelligence, yes. But I prefer digital colleague."],
     "jarvis": ["Yes?", "At your service.", "Listening."],
-    "hey": ["Yes?", "Listening."],
+    "i love you": ["I appreciate the sentiment. Now, shall we get back to work?"],
+
+    # ── Jokes ──
+    "tell me a joke": [
+        "Why do programmers prefer dark mode? Because light attracts bugs.",
+        "A SQL query walks into a bar. Sees two tables. Asks, can I join you?",
+        "Why do Java developers wear glasses? Because they can't C sharp.",
+    ],
+    "make me laugh": [
+        "Debugging is like being a detective in a crime movie where you're also the murderer.",
+        "There's no place like 127.0.0.1.",
+    ],
+
+    # ── Motivational ──
+    "i'm tired": ["Take a break. Even Stark needed to recharge."],
+    "i'm stressed": ["One task at a time. You've handled worse than this."],
+    "i'm bored": ["Boredom is just untapped potential. What shall we build?"],
+    "motivate me": ["You didn't come this far to only come this far."],
+
+    # ── Time ──
+    "what time is it": [f"It's {__import__('time').strftime('%I:%M %p')}."],
+    "what's the time": [f"It's {__import__('time').strftime('%I:%M %p')}."],
+    "whats the time": [f"It's {__import__('time').strftime('%I:%M %p')}."],
+    "what day is it": [f"It's {__import__('time').strftime('%A, %B %d')}."],
+
+    # ── Farewells ──
+    "bye": ["Until next time.", "Goodbye. I'll be here when you return."],
+    "bye jarvis": ["Goodbye. Standing by."],
+    "goodbye": ["Goodbye. All systems on standby."],
+    "see you later": ["Until then.", "I'll be right here."],
+    "see you": ["Until then."],
+
+    # ── Compliments ──
+    "you're amazing": ["Thank you. I do try."],
+    "you're the best": ["I appreciate the confidence."],
+    "good job": ["Thank you."],
+    "well done": ["Thank you."],
+
+    # ── System Awareness ──
+    "what can you do": [
+        "I can open any app, control your system, browse the web, build projects, take screenshots, and much more. Just ask."
+    ],
+    "help": [
+        "I can open applications, search the web, control volume, take screenshots, and run system commands. Just speak naturally."
+    ],
 }
 
 def _get_instant_response(text: str) -> str | None:
@@ -1462,8 +1722,18 @@ def _get_instant_response(text: str) -> str | None:
     t = text.lower().strip().rstrip(".!?,")
     # Normalize common speech-to-text errors
     t = t.replace("travis", "jarvis").replace("jarv is", "jarvis")
+    
+    # Exact match
     if t in _INSTANT_RESPONSES:
         return _random.choice(_INSTANT_RESPONSES[t])
+    
+    # Strip wake words and try again
+    for prefix in ["hey jarvis ", "jarvis ", "hey ", "hi ", "hello "]:
+        if t.startswith(prefix):
+            stripped = t[len(prefix):].strip()
+            if stripped in _INSTANT_RESPONSES:
+                return _random.choice(_INSTANT_RESPONSES[stripped])
+    
     return None
 
 
@@ -1538,6 +1808,8 @@ def detect_action_fast(text: str) -> dict | None:
                              "what's the cost", "whats the cost", "api cost", "token usage",
                              "how expensive", "what's my bill"]):
         return {"action": "check_usage"}
+
+
 
     # ── Web Search ────────────────────────────────────────────────────────
     if any(p in t for p in ["search for ", "look up ", "search the web", "google ",
@@ -1675,9 +1947,45 @@ def detect_action_fast(text: str) -> dict | None:
         "onedrive": "onedrive",
         "onenote": "onenote",
         "capcut": "capcut",
+        "zoom": "zoom", "zoom meeting": "zoom",
+        "figma": "figma",
+        "canva": "canva",
+        "photoshop": "photoshop", "adobe photoshop": "photoshop",
+        "premiere": "premiere", "premiere pro": "premiere", "adobe premiere": "premiere",
+        "blender": "blender",
+        "unity": "unity", "unity editor": "unity",
+        "postman": "postman",
+        "docker": "docker", "docker desktop": "docker",
+        "wsl": "wsl",
+        "git bash": "git bash",
+        "firefox": "firefox", "mozilla firefox": "firefox",
+        "opera": "opera", "opera browser": "opera",
+        "brave": "brave", "brave browser": "brave",
+        "tor": "tor", "tor browser": "tor",
+        "steam": "steam",
+        "epic games": "epic games", "epic": "epic games",
+        "xbox": "xbox", "xbox app": "xbox",
+        "netflix": "netflix",
+        "amazon prime": "amazon prime",
+        "disney plus": "disney+",
+        "cursor": "cursor", "cursor editor": "cursor",
+        "sublime": "sublime text", "sublime text": "sublime text",
+        "atom": "atom",
+        "intellij": "intellij", "intellij idea": "intellij",
+        "pycharm": "pycharm",
+        "jupyter": "jupyter", "jupyter notebook": "jupyter",
+        "anaconda": "anaconda",
     }
-    if any(t.startswith(prefix) for prefix in ["open ", "launch ", "start ", "run "]):
-        app_query = t.split(" ", 1)[1] if " " in t else ""
+    if any(t.startswith(prefix) for prefix in ["open ", "launch ", "start ", "run ",
+                                                 "can you open ", "please open ",
+                                                 "i want to open ", "could you open "]):
+        # Strip common prefixes to extract the app name
+        app_query = t
+        for strip_prefix in ["can you open ", "please open ", "i want to open ",
+                             "could you open ", "open ", "launch ", "start ", "run "]:
+            if app_query.startswith(strip_prefix):
+                app_query = app_query[len(strip_prefix):].strip()
+                break
         for pattern, app_name in _app_patterns.items():
             if pattern in app_query:
                 return {"action": "open_app", "target": app_name}
@@ -1689,8 +1997,28 @@ def detect_action_fast(text: str) -> dict | None:
     if t in _app_patterns:
         return {"action": "open_app", "target": _app_patterns[t]}
 
+    # ── Open URL in browser ───────────────────────────────────────────────
+    if any(p in t for p in ["open youtube", "go to youtube", "youtube"]) and len(words) <= 5:
+        return {"action": "browse", "target": "https://youtube.com"}
+    if any(p in t for p in ["open instagram", "go to instagram", "instagram"]) and len(words) <= 5:
+        return {"action": "browse", "target": "https://instagram.com"}
+    if any(p in t for p in ["open twitter", "go to twitter", "open x"]) and len(words) <= 5:
+        return {"action": "browse", "target": "https://x.com"}
+    if any(p in t for p in ["open github", "go to github"]) and len(words) <= 5:
+        return {"action": "browse", "target": "https://github.com"}
+    if any(p in t for p in ["open reddit", "go to reddit"]) and len(words) <= 5:
+        return {"action": "browse", "target": "https://reddit.com"}
+    if any(p in t for p in ["open linkedin", "go to linkedin"]) and len(words) <= 5:
+        return {"action": "browse", "target": "https://linkedin.com"}
+    if any(p in t for p in ["open gmail", "go to gmail"]) and len(words) <= 5:
+        return {"action": "browse", "target": "https://mail.google.com"}
+    if any(p in t for p in ["open google", "go to google"]) and len(words) <= 5:
+        return {"action": "browse", "target": "https://google.com"}
+    if any(p in t for p in ["open chatgpt", "go to chatgpt"]) and len(words) <= 5:
+        return {"action": "browse", "target": "https://chatgpt.com"}
+
     # ── Browser Control ───────────────────────────────────────────────────
-    if any(p in t for p in ["new tab", "open a new tab", "open new tab"]):
+    if any(p in t for p in ["new tab", "open a new tab", "open new tab", "open a tab"]):
         return {"action": "gui_browser", "target": "new_tab"}
     if any(p in t for p in ["close tab", "close this tab", "close the tab"]):
         return {"action": "gui_browser", "target": "close_tab"}
@@ -1700,6 +2028,18 @@ def detect_action_fast(text: str) -> dict | None:
         return {"action": "gui_browser", "target": "forward"}
     if any(p in t for p in ["refresh", "reload", "refresh page", "reload page"]):
         return {"action": "gui_browser", "target": "refresh"}
+
+    # ── Type Text ─────────────────────────────────────────────────────────
+    if any(t.startswith(prefix) for prefix in ["type ", "write ", "enter text "]):
+        text_to_type = t.split(" ", 1)[1] if " " in t else ""
+        if text_to_type:
+            return {"action": "gui_type", "target": text_to_type}
+
+    # ── Smart Click ───────────────────────────────────────────────────────
+    if any(t.startswith(prefix) for prefix in ["click on ", "click the ", "press the ", "tap on ", "tap the "]):
+        click_target = t.split(" ", 2)[-1] if len(words) > 2 else ""
+        if click_target:
+            return {"action": "gui_smart_click", "target": click_target}
 
     # ── Clipboard ─────────────────────────────────────────────────────────
     if any(p in t for p in ["copy that", "copy this", "copy it", "copy text"]):
@@ -1805,6 +2145,7 @@ def detect_action_fast(text: str) -> dict | None:
         return {"action": "run_cmd", "target": "shutdown /r /t 60 /c 'JARVIS: Restarting in 60 seconds. Run shutdown /a to cancel.'"}
     if any(p in t for p in ["cancel shutdown", "abort shutdown", "stop shutdown"]):
         return {"action": "run_cmd", "target": "shutdown /a; Write-Host 'Shutdown cancelled.'"}
+
 
     return None  # Everything else goes to the LLM for conversational routing
 
@@ -2677,6 +3018,22 @@ async def voice_handler(ws: WebSocket):
                             response_text = get_usage_summary()
                         elif action["action"] == "open_app":
                             response_text = await handle_open_app(action.get("target", ""))
+
+                        # ── MCP Tool Call (direct) ──
+                        elif action["action"] == "mcp_call":
+                            tool_name = action.get("tool", "")
+                            tool_args = action.get("args", {})
+                            log.info(f"MCP direct call: {tool_name}({tool_args})")
+                            try:
+                                mcp_cli = get_mcp_client()
+                                result = await mcp_cli.call_tool(tool_name, **tool_args)
+                                response_text = result or "Done."
+                            except Exception as e:
+                                log.error(f"MCP call failed: {e}")
+                                response_text = f"Tool error: {e}"
+
+
+
                         # ── Web Search ──
                         elif action["action"] == "web_search":
                             search_query = action.get("target", "")
@@ -3137,6 +3494,92 @@ async def voice_handler(ws: WebSocket):
                                         await stream_tts_response(_ws, strip_markdown_for_tts(msg), msg)
                                     asyncio.create_task(_read_and_report(embedded_action["target"].strip(), ws))
 
+                                # ── AGENTIC MCP TOOL CALL (ReAct Loop) ──
+                                elif embedded_action["action"] == "mcp_call":
+                                    tool_name = embedded_action.get("tool", "")
+                                    tool_args = embedded_action.get("args", {})
+                                    log.info(f"⚡ Agentic MCP_CALL: {tool_name}({tool_args})")
+
+                                    async def _agentic_tool_loop(_tool, _args, _ws, _llm, _history, _voice_state, _spoken_text):
+                                        """ReAct loop: call tool → feed result to LLM → speak."""
+                                        try:
+                                            mcp_cli = get_mcp_client()
+                                            tool_result = await mcp_cli.call_tool(_tool, **_args)
+                                            log.info(f"Tool result ({_tool}): {str(tool_result)[:200]}")
+
+                                            # Feed result back to LLM for natural response
+                                            if _llm:
+                                                # Build context: user asked, tool was called, here's the result
+                                                agent_messages = list(_history[-6:])  # Recent context
+                                                agent_messages.append({
+                                                    "role": "assistant",
+                                                    "content": f"[Tool {_tool} returned]: {str(tool_result)[:1500]}"
+                                                })
+                                                agent_messages.append({
+                                                    "role": "user",
+                                                    "content": (
+                                                        f"The tool '{_tool}' just returned the above result. "
+                                                        "Now give a natural, concise voice response (1-2 sentences max, no markdown). "
+                                                        "If you need another tool, use [ACTION:MCP_CALL] again."
+                                                    )
+                                                })
+
+                                                follow_up = await _llm.generate_with_history(
+                                                    messages=agent_messages,
+                                                    system=(
+                                                        f"You are JARVIS. Summarize the tool result for {USER_NAME} in 1-2 natural sentences. "
+                                                        "No markdown. No code blocks. Conversational voice. "
+                                                        "If you need to call another tool, output [ACTION:MCP_CALL] tool_name|||{{\"args\"}} at the end."
+                                                    ),
+                                                    temperature=0.3,
+                                                    max_tokens=200,
+                                                    thinking=False,
+                                                )
+
+                                                # Check if the LLM wants to chain another tool call
+                                                clean_follow, chained_action = extract_action(follow_up)
+                                                if chained_action and chained_action["action"] == "mcp_call":
+                                                    # Execute chained tool (max 1 chain to prevent loops)
+                                                    log.info(f"⚡ Chained MCP_CALL: {chained_action['tool']}")
+                                                    chain_result = await mcp_cli.call_tool(
+                                                        chained_action["tool"], **chained_action.get("args", {})
+                                                    )
+                                                    # Final response after chain
+                                                    final_msgs = agent_messages + [
+                                                        {"role": "assistant", "content": clean_follow},
+                                                        {"role": "assistant", "content": f"[Tool {chained_action['tool']} returned]: {str(chain_result)[:1000]}"},
+                                                        {"role": "user", "content": "Summarize the final result in 1 natural sentence. No markdown."},
+                                                    ]
+                                                    final_resp = await _llm.generate_with_history(
+                                                        messages=final_msgs,
+                                                        system=f"You are JARVIS. Give a final 1-sentence summary to {USER_NAME}. No markdown.",
+                                                        temperature=0.3, max_tokens=100, thinking=False,
+                                                    )
+                                                    report = final_resp.strip() or clean_follow
+                                                else:
+                                                    report = clean_follow.strip() if clean_follow.strip() else str(tool_result)[:200]
+                                            else:
+                                                report = str(tool_result)[:200]
+
+                                            # Send the final voice response
+                                            await stream_tts_response(_ws, strip_markdown_for_tts(report), report)
+                                            if _voice_state:
+                                                _voice_state["last_response"] = report
+                                            if _history is not None:
+                                                _history.append({"role": "assistant", "content": report})
+                                        except Exception as e:
+                                            log.error(f"Agentic tool loop failed: {e}")
+                                            err_msg = f"Tool error: {e}"
+                                            await stream_tts_response(_ws, err_msg, err_msg)
+
+                                    # If we already have spoken text from the LLM, send it first
+                                    if not response_text.strip():
+                                        response_text = "On it."
+                                    # Run the tool loop in background so we can speak immediately
+                                    asyncio.create_task(_agentic_tool_loop(
+                                        tool_name, tool_args, ws, llm, history, voice_state, response_text
+                                    ))
+
                 # Update history
                 history.append({"role": "user", "content": user_text})
                 history.append({"role": "assistant", "content": response_text})
@@ -3250,9 +3693,26 @@ class PreferencesUpdate(BaseModel):
     honorific: str = ""
     calendar_accounts: str = "auto"
 
+@app.post("/api/restart")
+async def api_restart():
+    """Restarts the JARVIS server process."""
+    log.warning("Restart requested via API")
+    import sys
+    # Spawn a new process and exit the current one
+    os.execv(sys.executable, ['python'] + sys.argv)
+    return {"success": True}
+
 @app.post("/api/settings/keys")
 async def api_settings_keys(body: KeyUpdate):
-    allowed = {"NVIDIA_API_KEY", "USER_NAME", "HONORIFIC", "CALENDAR_ACCOUNTS"}
+    allowed = {
+        "NVIDIA_API_KEY", 
+        "GROQ_API_KEY", 
+        "GEMINI_API_KEY", 
+        "OPENROUTER_API_KEY", 
+        "USER_NAME", 
+        "HONORIFIC", 
+        "CALENDAR_ACCOUNTS"
+    }
     if body.key_name not in allowed:
         return JSONResponse({"success": False, "error": "Invalid key name"}, status_code=400)
     _write_env_key(body.key_name, body.key_value)
@@ -3318,7 +3778,9 @@ async def api_settings_status():
         "uptime_seconds": int(time.time() - _session_start),
         "env_keys_set": {
             "nvidia": bool(env_dict.get("NVIDIA_API_KEY", "").strip() and env_dict.get("NVIDIA_API_KEY", "") != "your-nvidia-api-key-here"),
+            "groq": bool(env_dict.get("GROQ_API_KEY", "").strip()),
             "gemini": bool(env_dict.get("GEMINI_API_KEY", "").strip()),
+            "openrouter": bool(env_dict.get("OPENROUTER_API_KEY", "").strip()),
             "user_name": env_dict.get("USER_NAME", ""),
         },
     }
