@@ -650,30 +650,64 @@ class LLMRouter:
         temperature: float = 0.7,
         max_tokens: int = 1024,
     ) -> str:
-        """Generate using local Ollama instance."""
-        model_name = os.getenv("OLLAMA_MODEL", "llama3.2")
+        """Generate using local Ollama instance — turbo-optimized for 4GB VRAM.
+        
+        Optimizations:
+        - Streaming for fast time-to-first-token
+        - num_ctx=4096 to prevent VRAM overflow on RTX 3050
+        - num_gpu=99 to force ALL layers onto GPU (no CPU offload)
+        - keep_alive=300 to keep model hot in VRAM for 5 minutes
+        - /no_think tag to disable Qwen3's internal reasoning for speed
+        """
+        model_name = os.getenv("OLLAMA_MODEL", "qwen3:4b")
         url = "http://localhost:11434/api/chat"
+
+        # Strip any internal thinking from Qwen3 for speed
+        optimized_messages = []
+        for m in messages:
+            content = m.get("content", "")
+            if m["role"] == "user" and not content.strip().endswith("/no_think"):
+                content = content.rstrip() + " /no_think"
+            optimized_messages.append({"role": m["role"], "content": content})
 
         payload = {
             "model": model_name,
-            "messages": messages,
-            "stream": False,
+            "messages": optimized_messages,
+            "stream": True,
+            "keep_alive": "5m",
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
+                "num_ctx": 4096,
+                "num_gpu": 99,
             }
         }
 
-        log.info(f"[Ollama] Calling {model_name} locally...")
+        log.info(f"[Ollama] Calling {model_name} (GPU-accelerated, streaming)...")
         try:
-            # Use a dedicated client for Ollama to avoid shared-client issues
+            collected = []
             async with httpx.AsyncClient(timeout=120.0) as client:
-                resp = await client.post(url, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-                reply = data.get("message", {}).get("content", "")
-                log.info(f"[Ollama] ✓ Responded ({len(reply)} chars)")
-                return reply.strip()
+                async with client.stream("POST", url, json=payload) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            data = json.loads(line)
+                            token = data.get("message", {}).get("content", "")
+                            if token:
+                                collected.append(token)
+                            if data.get("done", False):
+                                break
+                        except json.JSONDecodeError:
+                            continue
+            
+            reply = "".join(collected)
+            # Strip Qwen3 think blocks if any leaked through
+            import re
+            reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
+            log.info(f"[Ollama] ✓ Responded ({len(reply)} chars)")
+            return reply
         except httpx.ConnectError:
             raise RuntimeError(f"Ollama is not running. Start it with: ollama serve")
         except Exception as e:

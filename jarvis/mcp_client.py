@@ -156,8 +156,12 @@ class MCPClient:
             log.warning("mcp package not installed, skipping external servers")
             return
 
+        # Use Windows-compatible command array for npx
         servers = [
-            ("npx", ["-y", "@modelcontextprotocol/server-puppeteer"]),
+            ("cmd", ["/c", "npx", "-y", "@modelcontextprotocol/server-puppeteer"]),
+            ("cmd", ["/c", "npx", "-y", "@modelcontextprotocol/server-memory"]),
+            ("cmd", ["/c", "npx", "-y", "@modelcontextprotocol/server-filesystem", "e:\\Antigravity\\Jarvis-assitant"]),
+            ("python", ["-m", "mcp_pyautogui_server"]),
         ]
 
         for cmd, args in servers:
