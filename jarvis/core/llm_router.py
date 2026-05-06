@@ -650,31 +650,22 @@ class LLMRouter:
         temperature: float = 0.7,
         max_tokens: int = 1024,
     ) -> str:
-        """Generate using local Ollama instance — turbo-optimized for 4GB VRAM.
+        """Generate using local Ollama — GPU-optimized for RTX 3050 4GB.
         
         Optimizations:
         - Streaming for fast time-to-first-token
-        - num_ctx=4096 to prevent VRAM overflow on RTX 3050
-        - num_gpu=99 to force ALL layers onto GPU (no CPU offload)
-        - keep_alive=300 to keep model hot in VRAM for 5 minutes
-        - /no_think tag to disable Qwen3's internal reasoning for speed
+        - num_ctx=4096 (fits with 2GB model + 2GB KV cache headroom)
+        - num_gpu=99 to force ALL layers onto GPU
+        - keep_alive=30m to keep model hot between queries
         """
-        model_name = os.getenv("OLLAMA_MODEL", "qwen3:4b")
+        model_name = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
         url = "http://localhost:11434/api/chat"
-
-        # Strip any internal thinking from Qwen3 for speed
-        optimized_messages = []
-        for m in messages:
-            content = m.get("content", "")
-            if m["role"] == "user" and not content.strip().endswith("/no_think"):
-                content = content.rstrip() + " /no_think"
-            optimized_messages.append({"role": m["role"], "content": content})
 
         payload = {
             "model": model_name,
-            "messages": optimized_messages,
+            "messages": messages,
             "stream": True,
-            "keep_alive": "5m",
+            "keep_alive": "30m",
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
@@ -702,10 +693,7 @@ class LLMRouter:
                         except json.JSONDecodeError:
                             continue
             
-            reply = "".join(collected)
-            # Strip Qwen3 think blocks if any leaked through
-            import re
-            reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
+            reply = "".join(collected).strip()
             log.info(f"[Ollama] ✓ Responded ({len(reply)} chars)")
             return reply
         except httpx.ConnectError:
