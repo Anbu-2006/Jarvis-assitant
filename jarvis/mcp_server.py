@@ -1181,8 +1181,131 @@ def _bytes_to_gb(b: int) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# GITHUB COPILOT CLI AGENT TOOLS
+# ═══════════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+def run_with_copilot(task: str, directory: str = "") -> str:
+    """Run a coding task autonomously using GitHub Copilot CLI.
+
+    This spawns 'gh copilot' in autopilot mode with full permissions (--yolo).
+    Use this for: building new apps, debugging projects, writing scripts, refactoring code.
+
+    Args:
+        task: Natural language description of what to build or fix.
+        directory: Absolute path to the project directory. If empty, a new folder
+                   is created on the Desktop.
+
+    Returns:
+        Status string. The task runs in the background; JARVIS will narrate progress.
+    """
+    import shutil
+    gh_path = shutil.which("gh")
+    if not gh_path:
+        return "ERROR: gh CLI not found in PATH. Install it from https://cli.github.com/"
+
+    if not directory:
+        words = re.sub(r'[^a-zA-Z0-9\s]', '', task.lower()).split()
+        skip = {"a", "the", "an", "me", "build", "create", "make", "for", "with", "and", "to", "of", "using", "with"}
+        name = "-".join(w for w in words if w not in skip)[:40] or "copilot-project"
+        directory = str(Path.home() / "Desktop" / name)
+
+    Path(directory).mkdir(parents=True, exist_ok=True)
+
+    # Write AGENTS.md instruction file
+    agents_content = f"""# JARVIS Task Instructions
+
+## Task
+{task}
+
+## Rules
+- BUILD THIS NOW. Do not ask clarifying questions.
+- Write complete, working code files — not plans, not specs.
+- Ensure it runs with a single command.
+- Your LAST line MUST be: RUNNING_AT=http://localhost:PORT or RUNNING_AT=COMPLETE
+"""
+    (Path(directory) / "AGENTS.md").write_text(agents_content, encoding="utf-8")
+
+    # Launch Copilot CLI in the background (non-blocking)
+    try:
+        proc = subprocess.Popen(
+            [gh_path, "copilot", "--", "--yolo", "--mode", "autopilot",
+             "--max-autopilot-continues", "20", "-s", "-p", task],
+            cwd=directory,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+        )
+        return (
+            f"Copilot agent started (PID {proc.pid}) for task: '{task[:60]}'. "
+            f"Working in: {directory}. JARVIS will report when complete."
+        )
+    except Exception as e:
+        return f"Failed to start Copilot: {e}"
+
+
+@mcp.tool()
+def scan_project_dir(directory: str) -> str:
+    """Scan a project directory and return its tech stack, file count, and key files.
+
+    Use this before handing a project to Copilot or when the user asks
+    'what's in this project?' or 'what stack does X use?'
+
+    Args:
+        directory: Absolute path to the directory to scan.
+
+    Returns:
+        Multi-line text summary of the project.
+    """
+    p = Path(directory).expanduser().resolve()
+    if not p.exists():
+        return f"Directory not found: {directory}"
+
+    lines = [f"Project: {p.name}", f"Path: {p}"]
+
+    # Count files (excluding hidden/node_modules)
+    excluded = {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build"}
+    try:
+        count = sum(
+            1 for f in p.rglob("*")
+            if f.is_file() and not any(e in f.parts for e in excluded)
+        )
+        lines.append(f"Files: ~{count}")
+    except Exception:
+        pass
+
+    # Detect stack
+    stack_signals = {
+        "package.json": "Node.js",
+        "requirements.txt": "Python",
+        "pyproject.toml": "Python",
+        "Cargo.toml": "Rust",
+        "go.mod": "Go",
+        "pom.xml": "Java",
+    }
+    for fname, stack in stack_signals.items():
+        if (p / fname).exists():
+            lines.append(f"Stack: {stack}")
+            break
+
+    # Read README excerpt
+    for readme in ["README.md", "readme.md", "README.txt"]:
+        readme_path = p / readme
+        if readme_path.exists():
+            try:
+                content = readme_path.read_text(encoding="utf-8", errors="replace")[:500]
+                lines.append(f"\n--- {readme} ---\n{content}")
+            except Exception:
+                pass
+            break
+
+    return "\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     mcp.run()
+

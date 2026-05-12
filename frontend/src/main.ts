@@ -185,11 +185,19 @@ socket.onMessage((msg) => {
     activeTasks.set(taskId, prompt);
     updateTasksDisplay();
     addLog(`TASK: Spawned ${taskId}`);
+    // Update Copilot HUD
+    const copilotEl = document.getElementById("hud-copilot-status");
+    if (copilotEl) { copilotEl.textContent = "ACTIVE"; copilotEl.style.color = "var(--neon-cyan)"; }
   } else if (type === "task_complete") {
     const taskId = msg.task_id as string;
     activeTasks.delete(taskId);
     updateTasksDisplay();
     addLog(`TASK: Complete ${taskId}`);
+    // Revert Copilot HUD if no more tasks
+    if (activeTasks.size === 0) {
+      const copilotEl = document.getElementById("hud-copilot-status");
+      if (copilotEl) { copilotEl.textContent = "IDLE"; copilotEl.style.color = ""; }
+    }
   }
 });
 

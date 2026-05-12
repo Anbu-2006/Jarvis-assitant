@@ -42,6 +42,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from jarvis.tools.actions import execute_action, monitor_build, open_terminal, open_browser, create_antigravity_task, _generate_project_name, prompt_existing_terminal
+from jarvis.tools.copilot_agent import get_copilot_agent, write_agents_md, dispatch_copilot_task
+from jarvis.tools.project_scanner import scan_project, format_context_for_voice
 from jarvis.tools.work_mode import WorkSession, is_casual_question
 from jarvis.tools.screen import get_active_windows, take_screenshot, describe_screen, format_windows_for_context
 from jarvis.tools.calendar_access import get_todays_events, get_upcoming_events, get_next_event, format_events_for_context, format_schedule_summary, refresh_cache as refresh_calendar_cache
@@ -83,7 +85,8 @@ ACTIONS (place at END of response):
 - [ACTION:BROWSE] url — open browser to URL
 - [ACTION:PROMPT_PROJECT] name ||| prompt — work on a coding project
 - [ACTION:SCREEN] — screenshot and describe screen
-- [ACTION:BUILD] description — create new project
+- [ACTION:BUILD] description — create new project with Antigravity IDE
+- [ACTION:COPILOT] task ||| directory — run GitHub Copilot CLI as autonomous coding agent (terminal-based, writes real code, debugs, builds from scratch; use for new projects, debugging, or multi-file edits; directory can be '~/Desktop/project-name' for new or the existing project path)
 - [ACTION:ADD_TASK] priority ||| title ||| desc ||| due
 - [ACTION:COMPLETE_TASK] id
 - [ACTION:ADD_NOTE] topic ||| content
@@ -94,6 +97,7 @@ MCP TOOLS: {tool_schemas}
 
 For system tasks (weather, brightness, apps, processes) use MCP_CALL tools. Never guess — call the tool.
 For "jump into X"/"work on X" — use PROMPT_PROJECT. You have full project access.
+For coding tasks (build new app, debug project, write scripts, refactor, setup environment) — prefer [ACTION:COPILOT] over [ACTION:BUILD]. Copilot is autonomous, writes real code, and runs in terminal.
 No action tags for casual chat. Ask questions before acting if unclear.
 
 {screen_context}
@@ -605,7 +609,7 @@ def extract_action(response: str) -> tuple[str, dict | None]:
 
     # --- Standard actions ---
     match = _action_re.search(
-        r'\[ACTION:(BUILD|BROWSE|RESEARCH|OPEN_TERMINAL|OPEN_APP|RUN_COMMAND|PROMPT_PROJECT|ADD_TASK|ADD_NOTE|COMPLETE_TASK|REMEMBER|CREATE_NOTE|READ_NOTE|SCREEN)\]\s*(.*?)$',
+        r'\[ACTION:(BUILD|BROWSE|RESEARCH|OPEN_TERMINAL|OPEN_APP|RUN_COMMAND|PROMPT_PROJECT|COPILOT|ADD_TASK|ADD_NOTE|COMPLETE_TASK|REMEMBER|CREATE_NOTE|READ_NOTE|SCREEN)\]\s*(.*?)$',
         response, _action_re.DOTALL,
     )
     if match:
@@ -622,6 +626,77 @@ async def _execute_build(target: str):
         await handle_build(target)
     except Exception as e:
         log.error(f"Build execution failed: {e}")
+
+
+async def _execute_copilot(
+    target: str, ws, history: list, voice_state: dict, task_id: str = None
+):
+    """Execute a [ACTION:COPILOT] tag — runs GitHub Copilot CLI autonomously.
+
+    Target format:  task ||| directory
+    Example:        Build a FastAPI todo app ||| ~/Desktop/todo-app
+    """
+    try:
+        if "|||" in target:
+            task_desc, _, working_dir = target.partition("|||")
+            task_desc = task_desc.strip()
+            working_dir = working_dir.strip()
+        else:
+            task_desc = target.strip()
+            # Auto-generate a project folder on Desktop
+            project_name = _generate_project_name(task_desc)
+            working_dir = str(Path.home() / "Desktop" / project_name)
+
+        # Expand ~ and resolve path
+        working_dir = str(Path(working_dir).expanduser().resolve())
+        os.makedirs(working_dir, exist_ok=True)
+
+        # Detect mode: debug vs build
+        t_lower = task_desc.lower()
+        mode = "debug" if any(w in t_lower for w in [
+            "debug", "fix", "repair", "investigate", "find the bug", "look into", "check"
+        ]) else "build"
+
+        # Detect stack hints from task description
+        stack = ""
+        if "react" in t_lower: stack = "React + Vite"
+        elif "next" in t_lower: stack = "Next.js"
+        elif "fastapi" in t_lower or "fast api" in t_lower: stack = "Python + FastAPI"
+        elif "flask" in t_lower: stack = "Python + Flask"
+        elif "django" in t_lower: stack = "Python + Django"
+        elif "node" in t_lower or "express" in t_lower: stack = "Node.js + Express"
+
+        # Write AGENTS.md so Copilot knows exactly what to do
+        write_agents_md(working_dir, task_desc, stack=stack, mode=mode)
+
+        # Register in dispatch registry
+        project_name = Path(working_dir).name
+        if task_id is None:
+            task_id = dispatch_registry.register(project_name, working_dir, task_desc[:200])
+
+        log.info(f"Copilot task dispatched: '{task_desc[:80]}' in {working_dir}")
+
+        # Run dispatch_copilot_task which handles streaming + narration
+        await dispatch_copilot_task(
+            task=task_desc,
+            working_dir=working_dir,
+            ws=ws,
+            llm=llm,
+            history=history,
+            voice_state=voice_state,
+            task_id=str(task_id),
+            stream_tts_fn=stream_tts_response,
+        )
+
+        dispatch_registry.update_status(task_id, "completed")
+
+    except Exception as e:
+        log.error(f"_execute_copilot failed: {e}", exc_info=True)
+        try:
+            msg = f"Copilot ran into a problem, sir: {str(e)[:100]}"
+            await stream_tts_response(ws, msg, msg)
+        except Exception:
+            pass
 
 
 async def _execute_browse(target: str):
@@ -3210,7 +3285,7 @@ async def voice_handler(ws: WebSocket):
                                 response_text = clean_response
                                 
                                 # Force fallback phrases for background tasks to avoid wordy LLM explanations
-                                if embedded_action["action"] in ["run_command", "build", "prompt_project", "research", "spotify_control"]:
+                                if embedded_action["action"] in ["run_command", "build", "prompt_project", "research", "spotify_control", "copilot"]:
                                     response_text = ""
 
                                 # Ensure there's always something to speak
@@ -3220,6 +3295,8 @@ async def voice_handler(ws: WebSocket):
                                         proj = embedded_action["target"].split("|||")[0].strip()
                                         response_text = f"Connecting to {proj} now."
                                     elif action_type == "build":
+                                        response_text = "On it."
+                                    elif action_type == "copilot":
                                         response_text = "On it."
                                     elif action_type == "research":
                                         response_text = "Looking into that now."
@@ -3391,6 +3468,16 @@ async def voice_handler(ws: WebSocket):
                                             msg = f"Couldn't find a note matching '{search_term}'."
                                         await stream_tts_response(_ws, strip_markdown_for_tts(msg), msg)
                                     asyncio.create_task(_read_and_report(embedded_action["target"].strip(), ws))
+
+                                # ── GITHUB COPILOT CLI AGENT ──
+                                elif embedded_action["action"] == "copilot":
+                                    _copilot_target = embedded_action["target"]
+                                    log.info(f"🤖 Copilot agent dispatched: {_copilot_target[:80]}")
+                                    asyncio.create_task(
+                                        _execute_copilot(
+                                            _copilot_target, ws, history, voice_state
+                                        )
+                                    )
 
                                 # ── AGENTIC MCP TOOL CALL (ReAct Loop) ──
                                 elif embedded_action["action"] == "mcp_call":
